@@ -1,0 +1,685 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Puckman Visual Closure – Fishing</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      margin: 0;
+      padding: 1rem;
+      background: #111;
+      color: #f5f5f5;
+    }
+
+    h1 {
+      font-size: 1.4rem;
+      margin-bottom: 0.4rem;
+    }
+
+    .note {
+      font-size: 0.85rem;
+      max-width: 50rem;
+      margin-bottom: 0.75rem;
+      color: #ccc;
+    }
+
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      align-items: center;
+      margin-bottom: 0.75rem;
+    }
+
+    label {
+      font-size: 0.9rem;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+    }
+
+    input[type="range"] {
+      width: 160px;
+    }
+
+    input[type="number"] {
+      width: 4rem;
+      padding: 0.25rem 0.4rem;
+      font-size: 0.9rem;
+    }
+
+    button {
+      padding: 0.35rem 0.7rem;
+      font-size: 0.9rem;
+      cursor: pointer;
+      border-radius: 4px;
+      border: 1px solid #555;
+      background: #222;
+      color: #f5f5f5;
+    }
+
+    button:hover {
+      background: #333;
+    }
+
+    .value-badge {
+      display: inline-block;
+      padding: 0.1rem 0.35rem;
+      border-radius: 999px;
+      border: 1px solid #555;
+      font-size: 0.8rem;
+      min-width: 3rem;
+      text-align: center;
+      background: rgba(255, 255, 255, 0.02);
+    }
+
+    .workspace-shell {
+      max-width: 960px;
+      margin: 0 auto;
+    }
+
+    .lake {
+      position: relative;
+      width: 100%;
+      height: 420px;
+      border-radius: 8px;
+      border: 2px solid #444;
+      overflow: hidden;
+      cursor: crosshair;
+      background:
+        linear-gradient(to top, #0b2742 0, #16507c 45%, #89c8ff 80%, #cde9ff 100%);
+    }
+
+    .lake-water-band {
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: 32%;
+      bottom: 0;
+      background:
+        repeating-linear-gradient(
+          0deg,
+          rgba(255, 255, 255, 0.08) 0,
+          rgba(255, 255, 255, 0.08) 1px,
+          rgba(255, 255, 255, 0.0) 1px,
+          rgba(255, 255, 255, 0.0) 6px
+        ),
+        linear-gradient(to bottom, #1d5b8a 0, #0c304b 50%, #051723 100%);
+      animation: waterDrift 18s linear infinite;
+      overflow: visible;
+    }
+
+    @keyframes waterDrift {
+      from {
+        background-position: 0 0, 0 0;
+      }
+      to {
+        background-position: 0 40px, 0 0;
+      }
+    }
+
+    .boat {
+      position: absolute;
+      top: 6%;
+      left: 12%;
+      width: 120px;
+      height: 40px;
+    }
+
+    .boat-hull {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: 70%;
+      background: linear-gradient(to top, #5d3a24, #8a5a36);
+      border-radius: 0 0 60% 60%;
+      box-shadow: 0 3px 4px rgba(0, 0, 0, 0.4);
+    }
+
+    .boat-rim {
+      position: absolute;
+      top: 0;
+      left: 6%;
+      right: 6%;
+      height: 20%;
+      background: #b58c65;
+      border-radius: 999px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+    }
+
+    .puck-in-boat {
+      position: absolute;
+      bottom: 26%;
+      left: 55%;
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      background: #ffd966;
+      box-shadow: 0 0 6px rgba(0, 0, 0, 0.4);
+      transform: translateX(-50%);
+      overflow: hidden;
+    }
+
+    .puck-in-boat-mouth {
+      position: absolute;
+      width: 120%;
+      height: 120%;
+      top: 50%;
+      left: 50%;
+      background: rgba(0, 0, 0, 0.85);
+      transform-origin: 0% 50%;
+      transform: translate(-5%, -50%);
+      clip-path: polygon(0 50%, 100% 40%, 100% 60%);
+      opacity: 0.95;
+    }
+
+    .guide-text {
+      position: absolute;
+      left: 8px;
+      top: 6px;
+      font-size: 0.8rem;
+      color: rgba(240, 240, 240, 0.8);
+    }
+
+    .guide-text-bottom {
+      position: absolute;
+      right: 8px;
+      bottom: 6px;
+      font-size: 0.8rem;
+      color: rgba(240, 240, 240, 0.8);
+      text-align: right;
+    }
+
+    /* Fish and splash elements */
+
+    .fish-spot {
+      position: absolute;
+      width: 76px;
+      height: 26px;
+      overflow: hidden;
+      /* top is set via JS within the water band */
+    }
+
+    .fish-inner {
+      position: absolute;
+      top: var(--fish-top, 8px);
+      left: 50%;
+      transform: translateX(-50%);
+    }
+
+    .fish-body {
+      position: relative;
+      width: 44px;
+      height: 22px;
+      border-radius: 60% 80% 80% 60%;
+      background: #ffd966;
+      box-shadow: 0 0 4px rgba(0, 0, 0, 0.4);
+    }
+
+    .fish-body::after {
+      content: "";
+      position: absolute;
+      right: -10px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 0;
+      height: 0;
+      border-top: 8px solid transparent;
+      border-bottom: 8px solid transparent;
+      border-left: 12px solid rgba(255, 217, 102, 1);
+    }
+
+    .fish-body::before {
+      content: "";
+      position: absolute;
+      left: 9px;
+      top: 40%;
+      width: 4px;
+      height: 4px;
+      border-radius: 50%;
+      background: #222;
+    }
+
+    .fish-splash {
+      position: absolute;
+      width: 40px;
+      height: 14px;
+      background:
+        radial-gradient(circle at 20% 0%, rgba(255, 255, 255, 0.6) 0, transparent 50%),
+        radial-gradient(circle at 80% 0%, rgba(255, 255, 255, 0.5) 0, transparent 55%);
+      opacity: 0.7;
+      transform: translate(-50%, -40%);
+      pointer-events: none;
+    }
+
+    .fish-spot::after {
+      /* water ripple line across the top of the spot */
+      content: "";
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: 6px;
+      height: 2px;
+      background: linear-gradient(
+        to right,
+        rgba(255, 255, 255, 0) 0,
+        rgba(255, 255, 255, 0.4) 30%,
+        rgba(255, 255, 255, 0) 70%
+      );
+      opacity: 0.7;
+      pointer-events: none;
+    }
+
+    .fish-spot.caught {
+      overflow: visible;
+    }
+
+    .fish-spot.caught .fish-inner {
+      animation: fishRise 0.7s ease-out forwards;
+    }
+
+    @keyframes fishRise {
+      from {
+        transform: translateX(-50%) translateY(0);
+      }
+      to {
+        transform: translateX(-50%) translateY(-80px);
+      }
+    }
+
+    /* Camouflage variations controlled by classes */
+
+    .fish-easy .fish-body {
+      background: #ffd966;
+    }
+    .fish-easy .fish-body::after {
+      border-left-color: #ffe89a;
+    }
+
+    .fish-medium .fish-body {
+      background: #f5c05a;
+    }
+    .fish-medium .fish-body::after {
+      border-left-color: #f8d38a;
+    }
+
+    .fish-hard .fish-body {
+      background: #2b5e86;
+    }
+    .fish-hard .fish-body::after {
+      border-left-color: #3c7ba8;
+    }
+
+    /* Distractor splashes (no fish) */
+
+    .splash-only {
+      position: absolute;
+      width: 54px;
+      height: 18px;
+      overflow: visible;
+    }
+
+    .splash-only-shape {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: 42px;
+      height: 12px;
+      transform: translate(-50%, -50%);
+      background:
+        radial-gradient(circle at 10% 0%, rgba(255, 255, 255, 0.5) 0, transparent 45%),
+        radial-gradient(circle at 70% 0%, rgba(255, 255, 255, 0.45) 0, transparent 55%);
+      opacity: 0.75;
+    }
+
+    .status-line {
+      margin-top: 0.5rem;
+      font-size: 0.85rem;
+      color: #ccc;
+      text-align: center;
+    }
+
+    .status-line strong {
+      color: #ffd966;
+    }
+
+    .hint-text {
+      margin-top: 0.6rem;
+      font-size: 0.8rem;
+      color: #ccc;
+      max-width: 50rem;
+    }
+
+    .hint-text strong {
+      color: #ffd966;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      * {
+        scroll-behavior: auto !important;
+        transition: none !important;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <h1>Puckman Visual Closure – Fishing</h1>
+
+  <p class="note">
+    Puckman is in a boat watching the water. Each trial, only the top of a fish sticks out of the water line.
+    Your task is to spot this partial shape and click directly on it to pull up the fish.
+    This is a practice tool for visual closure and figure–ground, not a medical test.
+  </p>
+
+  <div class="controls">
+    <label>
+      Difficulty:
+      <input type="range" id="difficultyRange" min="1" max="5" value="3">
+    </label>
+    <span class="value-badge" id="difficultyValue">3 medium</span>
+
+    <label>
+      Fish per session:
+      <input type="number" id="trialsInput" min="3" max="40" value="10">
+    </label>
+
+    <button id="startBtn">Start fishing</button>
+  </div>
+
+  <div class="workspace-shell">
+    <div class="lake" id="lake">
+      <div class="boat">
+        <div class="boat-hull"></div>
+        <div class="boat-rim"></div>
+        <div class="puck-in-boat">
+          <div class="puck-in-boat-mouth"></div>
+        </div>
+      </div>
+
+      <div class="guide-text">Keep your head still, move only your eyes.</div>
+      <div class="guide-text-bottom">Click the partial fish when you spot it.<br>Clicks in the water without a fish count as errors.</div>
+
+      <div class="lake-water-band" id="waterBand">
+        <!-- Fish and splashes are injected here -->
+      </div>
+    </div>
+
+    <div class="status-line" id="statusLine">
+      Idle. Choose difficulty, set fish per session, then press <strong>Start fishing</strong>.
+    </div>
+
+    <p class="hint-text">
+      Suggested use:
+      <br>
+      • Use a mid level difficulty first. Watch the water band and let your eyes roam rather than staring at one point.
+      <br>
+      • When you see a hint of a fish body or fin above the ripple line, click that region to pull it up.
+      <br>
+      • The program shows one fish at a time. It tracks how many you catch, how many errors you make, and your average
+      reaction time. If the session becomes tiring or uncomfortable, stop or lower the difficulty.
+    </p>
+  </div>
+
+  <script>
+    (function () {
+      const difficultyRange = document.getElementById("difficultyRange");
+      const difficultyValue = document.getElementById("difficultyValue");
+      const trialsInput = document.getElementById("trialsInput");
+      const startBtn = document.getElementById("startBtn");
+      const lake = document.getElementById("lake");
+      const waterBand = document.getElementById("waterBand");
+      const statusLine = document.getElementById("statusLine");
+
+      let sessionActive = false;
+      let fishRemaining = 0;
+      let fishIndex = 0;
+      let errorsThisSession = 0;
+      let reactionTimes = [];
+      let trialStartTime = null;
+      let currentFishSpot = null;
+
+      function updateDifficultyBadge() {
+        const v = parseInt(difficultyRange.value, 10);
+        const labels = {
+          1: "1 easy",
+          2: "2",
+          3: "3 medium",
+          4: "4",
+          5: "5 hard"
+        };
+        difficultyValue.textContent = labels[v] || String(v);
+      }
+
+      function clearWater() {
+        while (waterBand.firstChild) {
+          waterBand.removeChild(waterBand.firstChild);
+        }
+        currentFishSpot = null;
+      }
+
+      function randomRange(min, max) {
+        return min + Math.random() * (max - min);
+      }
+
+      function spawnFishTrial() {
+        clearWater();
+
+        if (fishRemaining <= 0) {
+          endSession();
+          return;
+        }
+
+        fishIndex++;
+        fishRemaining--;
+
+        const bandRect = waterBand.getBoundingClientRect();
+        const width = bandRect.width;
+        const height = bandRect.height;
+
+        const marginX = 60;
+        const marginY = 26;
+
+        const x = randomRange(marginX, width - marginX);
+        const y = randomRange(marginY, height - marginY * 1.2);
+
+        const fishSpot = document.createElement("div");
+        fishSpot.className = "fish-spot";
+        fishSpot.style.left = x + "px";
+        fishSpot.style.top = y + "px";
+
+        const inner = document.createElement("div");
+        inner.className = "fish-inner";
+
+        const fishBody = document.createElement("div");
+        fishBody.className = "fish-body";
+
+        const difficulty = parseInt(difficultyRange.value, 10);
+        let topOffset;
+        let fishClass;
+        if (difficulty <= 1) {
+          topOffset = 2;
+          fishClass = "fish-easy";
+        } else if (difficulty === 2) {
+          topOffset = 6;
+          fishClass = "fish-easy";
+        } else if (difficulty === 3) {
+          topOffset = 10;
+          fishClass = "fish-medium";
+        } else if (difficulty === 4) {
+          topOffset = 14;
+          fishClass = "fish-medium";
+        } else {
+          topOffset = 18;
+          fishClass = "fish-hard";
+        }
+
+        fishSpot.style.setProperty("--fish-top", topOffset + "px");
+        fishSpot.classList.add(fishClass);
+
+        inner.appendChild(fishBody);
+        fishSpot.appendChild(inner);
+
+        // Small splash marker near the fish as additional partial cue
+        const splash = document.createElement("div");
+        splash.className = "fish-splash";
+        splash.style.left = "50%";
+        splash.style.top = "40%";
+        fishSpot.appendChild(splash);
+
+        waterBand.appendChild(fishSpot);
+        currentFishSpot = fishSpot;
+
+        // Add some distractor splashes elsewhere
+        const distractors = Math.floor(randomRange(1, 4));
+        for (let i = 0; i < distractors; i++) {
+          const sx = randomRange(marginX, width - marginX);
+          const sy = randomRange(marginY, height - marginY * 1.1);
+          const splashOnly = document.createElement("div");
+          splashOnly.className = "splash-only";
+          splashOnly.style.left = sx + "px";
+          splashOnly.style.top = sy + "px";
+
+          const shape = document.createElement("div");
+          shape.className = "splash-only-shape";
+          splashOnly.appendChild(shape);
+
+          waterBand.appendChild(splashOnly);
+        }
+
+        trialStartTime = performance.now();
+
+        statusLine.innerHTML =
+          "Fish " + fishIndex + " of " + (fishIndex + fishRemaining) +
+          ". Look for the partial body above the water line and click it.";
+      }
+
+      function startSession() {
+        const trials = Math.max(3, Math.min(40, parseInt(trialsInput.value, 10) || 10));
+        fishRemaining = trials;
+        fishIndex = 0;
+        errorsThisSession = 0;
+        reactionTimes = [];
+        sessionActive = true;
+        updateDifficultyBadge();
+        spawnFishTrial();
+      }
+
+      function endSession() {
+        sessionActive = false;
+        clearWater();
+
+        let avg = 0;
+        if (reactionTimes.length > 0) {
+          const sum = reactionTimes.reduce((a, b) => a + b, 0);
+          avg = sum / reactionTimes.length;
+        }
+
+        statusLine.innerHTML =
+          "Session complete. Fish caught: <strong>" + reactionTimes.length +
+          "</strong> · Errors: <strong>" + errorsThisSession +
+          "</strong> · Average reaction: <strong>" + avg.toFixed(2) +
+          " s</strong>. Adjust difficulty or fish count and press <strong>Start fishing</strong> to run again.";
+      }
+
+      function handleFishClick(e) {
+        if (!sessionActive) return;
+        if (!currentFishSpot) return;
+
+        // Prevent water click handler
+        e.stopPropagation();
+
+        const now = performance.now();
+        if (trialStartTime) {
+          const rt = (now - trialStartTime) / 1000;
+          reactionTimes.push(rt);
+        }
+
+        currentFishSpot.classList.add("caught");
+        currentFishSpot = null;
+
+        statusLine.innerHTML =
+          "Caught fish " + fishIndex + ". Reaction: <strong>" +
+          reactionTimes[reactionTimes.length - 1].toFixed(2) +
+          " s</strong>. Preparing next fish...";
+
+        setTimeout(() => {
+          if (sessionActive) {
+            spawnFishTrial();
+          }
+        }, 800);
+      }
+
+      function handleLakeClick() {
+        if (!sessionActive) return;
+
+        // Check if click was inside the real fish spot area by coordinate would be more precise,
+        // but we already stop propagation on fish itself. So any lake click here was a miss.
+        errorsThisSession++;
+        statusLine.innerHTML =
+          "Missed. Errors this session: <strong>" + errorsThisSession +
+          "</strong>. Keep looking for the partial fish on the next trial or current one.";
+      }
+
+      difficultyRange.addEventListener("input", updateDifficultyBadge);
+
+      startBtn.addEventListener("click", function () {
+        startSession();
+      });
+
+      // Event delegation for fish clicks
+      waterBand.addEventListener("click", function (e) {
+        if (!sessionActive) return;
+
+        const target = e.target;
+        if (!currentFishSpot) {
+          handleLakeClick();
+          return;
+        }
+
+        if (currentFishSpot.contains(target)) {
+          handleFishClick(e);
+        } else {
+          handleLakeClick();
+        }
+      });
+
+      // Prevent background clicks in top sky area from counting as errors
+      lake.addEventListener("click", function (e) {
+        const bandRect = waterBand.getBoundingClientRect();
+        const y = e.clientY;
+        if (y < bandRect.top || y > bandRect.bottom) {
+          // Ignore clicks outside water band
+          e.stopPropagation();
+          return;
+        }
+      }, true);
+
+      window.addEventListener("resize", function () {
+        // On resize, regenerate fish placement for current trial if session is active
+        if (sessionActive) {
+          // Do not advance the trial, just re-place the fish
+          const fishWasActive = currentFishSpot != null;
+          clearWater();
+          if (fishWasActive) {
+            // Respawn same index without incrementing counters
+            spawnFishTrial();
+          }
+        }
+      });
+
+      // Initial state
+      updateDifficultyBadge();
+      statusLine.innerHTML =
+        "Idle. Choose difficulty, set fish per session, then press <strong>Start fishing</strong>.";
+    })();
+  </script>
+</body>
+</html>

@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Vergence Targets - Near/Far Cues</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    :root {
+      --target-size: 40px;
+      --bg-color: #111;
+      --fg-color: #f5f5f5;
+      --accent-color: #ffd966;
+      --guide-color: rgba(200, 200, 200, 0.3);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      margin: 0;
+      padding: 1rem;
+      background: var(--bg-color);
+      color: var(--fg-color);
+    }
+
+    h1 {
+      font-size: 1.4rem;
+      margin-bottom: 0.5rem;
+    }
+
+    .note {
+      font-size: 0.85rem;
+      max-width: 50rem;
+      margin-bottom: 0.75rem;
+      color: #ccc;
+    }
+
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      align-items: center;
+      margin-bottom: 0.75rem;
+    }
+
+    .controls-group {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      align-items: center;
+    }
+
+    label {
+      font-size: 0.9rem;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+    }
+
+    input[type="range"] {
+      width: 160px;
+    }
+
+    input[type="checkbox"] {
+      transform: scale(1.1);
+    }
+
+    .value-badge {
+      display: inline-block;
+      padding: 0.1rem 0.35rem;
+      border-radius: 999px;
+      border: 1px solid #555;
+      font-size: 0.8rem;
+      min-width: 3rem;
+      text-align: center;
+      background: rgba(255, 255, 255, 0.02);
+    }
+
+    .mode-label {
+      font-size: 0.8rem;
+      opacity: 0.8;
+    }
+
+    .workspace-shell {
+      max-width: 960px;
+      margin: 0 auto;
+    }
+
+    .workspace {
+      position: relative;
+      width: 100%;
+      height: 320px;
+      border-radius: 8px;
+      border: 2px solid #444;
+      margin: 0 auto;
+      background: #000;
+      overflow: hidden;
+    }
+
+    .workspace.light {
+      background: #f9f9f9;
+      border-color: #bbb;
+    }
+
+    .center-line {
+      position: absolute;
+      top: 50%;
+      left: 0;
+      right: 0;
+      height: 0;
+      border-top: 1px dashed var(--guide-color);
+      pointer-events: none;
+    }
+
+    .center-marker {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 10px;
+      height: 26px;
+      border-radius: 999px;
+      transform: translate(-50%, -50%);
+      border: 1px solid var(--guide-color);
+      background: rgba(255, 255, 255, 0.03);
+      pointer-events: none;
+    }
+
+    .target {
+      position: absolute;
+      width: var(--target-size);
+      height: var(--target-size);
+      border-radius: 50%;
+      border: 3px solid var(--accent-color);
+      transform: translate(-50%, -50%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .target-inner {
+      position: relative;
+      width: 60%;
+      height: 60%;
+      border-radius: 50%;
+      border: 2px solid var(--accent-color);
+    }
+
+    .target-inner::before,
+    .target-inner::after {
+      content: "";
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      background: var(--accent-color);
+      transform: translate(-50%, -50%);
+    }
+
+    .target-inner::before {
+      width: 2px;
+      height: 100%;
+    }
+
+    .target-inner::after {
+      width: 100%;
+      height: 2px;
+    }
+
+    .hint-text {
+      margin-top: 0.6rem;
+      font-size: 0.8rem;
+      color: #ccc;
+      max-width: 50rem;
+    }
+
+    .hint-text strong {
+      color: var(--accent-color);
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      * {
+        scroll-behavior: auto !important;
+        transition: none !important;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <h1>Vergence Targets - Side by Side</h1>
+
+  <p class="note">
+    This pattern gives two identical symbols with adjustable spacing. Some people use this kind of setup to practice
+    making the two images overlap or fuse. This code is for experimentation only and is not a treatment plan.
+    If you have diplopia or other eye conditions, a clinician should decide whether you should do any vergence work.
+  </p>
+
+  <div class="controls">
+    <div class="controls-group">
+      <label>
+        Disparity:
+        <input type="range" id="spacingRange" min="8" max="40" value="20" step="1">
+      </label>
+      <span class="value-badge" id="spacingValue">20% (~0 px)</span>
+      <span class="mode-label">Higher value = targets farther apart horizontally.</span>
+    </div>
+
+    <div class="controls-group">
+      <label>
+        Target size:
+        <input type="range" id="sizeRange" min="24" max="80" value="40" step="2">
+      </label>
+      <span class="value-badge" id="sizeValue">40 px</span>
+    </div>
+
+    <div class="controls-group">
+      <label>
+        <input type="checkbox" id="lightMode">
+        Light background
+      </label>
+    </div>
+  </div>
+
+  <div class="workspace-shell">
+    <div class="workspace" id="workspace">
+      <div class="center-line"></div>
+      <div class="center-marker"></div>
+
+      <div class="target" id="leftTarget" aria-hidden="true">
+        <div class="target-inner"></div>
+      </div>
+      <div class="target" id="rightTarget" aria-hidden="true">
+        <div class="target-inner"></div>
+      </div>
+    </div>
+
+    <p class="hint-text">
+      Suggested use (not medical advice):
+      <br>
+      • Sit at a comfortable distance and keep your head still.
+      <br>
+      • Start with a moderate disparity. Look at the central marker between the two symbols.
+      <br>
+      • For <strong>crossed fusion</strong> (eyes turning more inward), some people slowly relax their gaze toward the marker
+      until the two symbols seem to overlap into a third one in the middle.
+      <br>
+      • For <strong>through or parallel fusion</strong> (eyes aiming “through” the screen), some people imagine looking
+      past the screen so the two symbols appear to drift together.
+      <br>
+      Stop if you get strong eye strain, headache, nausea, or any worrying change in your vision and discuss this kind of
+      work with an eye care professional.
+    </p>
+  </div>
+
+  <script>
+    (function () {
+      const workspace = document.getElementById("workspace");
+      const leftTarget = document.getElementById("leftTarget");
+      const rightTarget = document.getElementById("rightTarget");
+
+      const spacingRange = document.getElementById("spacingRange");
+      const spacingValue = document.getElementById("spacingValue");
+      const sizeRange = document.getElementById("sizeRange");
+      const sizeValue = document.getElementById("sizeValue");
+      const lightMode = document.getElementById("lightMode");
+
+      function updateTargets() {
+        const level = parseFloat(spacingRange.value); // percent of workspace width
+        const rect = workspace.getBoundingClientRect();
+        const spacingPx = rect.width * (level / 100);
+        const offset = spacingPx / 2;
+
+        const centerXPercent = 50;
+        const centerYPercent = 50;
+
+        leftTarget.style.top = centerYPercent + "%";
+        rightTarget.style.top = centerYPercent + "%";
+
+        leftTarget.style.left = "calc(" + centerXPercent + "% - " + offset + "px)";
+        rightTarget.style.left = "calc(" + centerXPercent + "% + " + offset + "px)";
+
+        spacingValue.textContent = level.toFixed(0) + "% (~" + Math.round(spacingPx) + " px)";
+      }
+
+      function updateSize() {
+        const size = parseInt(sizeRange.value, 10) || 40;
+        document.documentElement.style.setProperty("--target-size", size + "px");
+        sizeValue.textContent = size + " px";
+        // After changing size, spacing might feel different, but geometry in percent stays valid.
+        updateTargets();
+      }
+
+      function updateTheme() {
+        const root = document.documentElement;
+        if (lightMode.checked) {
+          workspace.classList.add("light");
+          root.style.setProperty("--bg-color", "#f0f0f0");
+          root.style.setProperty("--fg-color", "#111");
+          root.style.setProperty("--guide-color", "rgba(80, 80, 80, 0.3)");
+        } else {
+          workspace.classList.remove("light");
+          root.style.setProperty("--bg-color", "#111");
+          root.style.setProperty("--fg-color", "#f5f5f5");
+          root.style.setProperty("--guide-color", "rgba(200, 200, 200, 0.3)");
+        }
+      }
+
+      spacingRange.addEventListener("input", updateTargets);
+      sizeRange.addEventListener("input", updateSize);
+      lightMode.addEventListener("change", updateTheme);
+      window.addEventListener("resize", updateTargets);
+
+      // Initial setup
+      updateTheme();
+      updateSize();
+      updateTargets();
+    })();
+  </script>
+</body>
+</html>

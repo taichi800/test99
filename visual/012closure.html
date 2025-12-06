@@ -1,0 +1,545 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Contour Completion - Loop Finder</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      margin: 0;
+      padding: 1rem;
+      background: #111;
+      color: #f5f5f5;
+    }
+
+    h1 {
+      font-size: 1.4rem;
+      margin-bottom: 0.4rem;
+    }
+
+    .note {
+      font-size: 0.85rem;
+      max-width: 48rem;
+      margin-bottom: 0.75rem;
+      color: #ccc;
+    }
+
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      align-items: center;
+      margin-bottom: 0.75rem;
+    }
+
+    label {
+      font-size: 0.9rem;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+    }
+
+    input[type="range"] {
+      width: 160px;
+    }
+
+    button {
+      padding: 0.35rem 0.7rem;
+      font-size: 0.9rem;
+      cursor: pointer;
+      border-radius: 4px;
+      border: 1px solid #555;
+      background: #222;
+      color: #f5f5f5;
+    }
+
+    button:hover {
+      background: #333;
+    }
+
+    .value-badge {
+      display: inline-block;
+      padding: 0.1rem 0.35rem;
+      border-radius: 999px;
+      border: 1px solid #555;
+      font-size: 0.8rem;
+      min-width: 3.2rem;
+      text-align: center;
+      background: rgba(255, 255, 255, 0.02);
+    }
+
+    .panels-shell {
+      max-width: 960px;
+      margin: 0 auto;
+    }
+
+    .panels {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 0.8rem;
+      margin-bottom: 0.6rem;
+    }
+
+    .panel {
+      position: relative;
+      height: 170px;
+      border-radius: 8px;
+      background: #000;
+      border: 2px solid #333;
+      overflow: hidden;
+      cursor: pointer;
+    }
+
+    .panel:hover {
+      border-color: #555;
+    }
+
+    .panel::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(circle at 30% 20%, rgba(255, 255, 255, 0.05) 0, transparent 60%);
+      pointer-events: none;
+    }
+
+    .panel-index {
+      position: absolute;
+      top: 4px;
+      left: 6px;
+      font-size: 0.7rem;
+      color: rgba(255, 255, 255, 0.65);
+      z-index: 2;
+    }
+
+    .seg {
+      position: absolute;
+      width: 26px;
+      height: 2px;
+      background: #f5f5f5;
+      opacity: 0.9;
+      transform-origin: 50% 50%;
+    }
+
+    .panel-correct {
+      box-shadow: 0 0 0 2px #35b36b;
+      border-color: #35b36b;
+    }
+
+    .panel-incorrect {
+      box-shadow: 0 0 0 2px #ff6666;
+      border-color: #ff6666;
+    }
+
+    .panel-target {
+      box-shadow: 0 0 0 2px #ffd966;
+    }
+
+    .status-line {
+      font-size: 0.85rem;
+      color: #ccc;
+      text-align: center;
+      margin-top: 0.25rem;
+    }
+
+    .status-line strong {
+      color: #ffd966;
+    }
+
+    .hint-text {
+      margin-top: 0.6rem;
+      font-size: 0.8rem;
+      color: #ccc;
+      max-width: 48rem;
+    }
+
+    .hint-text strong {
+      color: #ffd966;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      * {
+        scroll-behavior: auto !important;
+        transition: none !important;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <h1>Contour Completion - Loop Finder</h1>
+
+  <p class="note">
+    One of these panels contains short line fragments that lie on a single smooth loop with gaps.
+    The others are just random fragments with no global contour. Your task is to pick the panel that your visual system
+    completes into a loop. This stresses contour completion and good continuation, but it is not a calibrated clinical test.
+  </p>
+
+  <div class="controls">
+    <label>
+      Difficulty:
+      <input type="range" id="difficultyRange" min="1" max="5" value="3">
+    </label>
+    <span class="value-badge" id="difficultyValue">3 medium</span>
+
+    <button id="nextTrialBtn">Next trial</button>
+    <button id="resetStatsBtn">Reset stats</button>
+  </div>
+
+  <div class="panels-shell">
+    <div id="panels" class="panels" aria-label="Contour panels">
+      <!-- Panels injected by JS -->
+    </div>
+
+    <div class="status-line" id="statusLine">
+      Trials: <strong>0</strong> · Correct: <strong>0</strong> · Accuracy: <strong>0%</strong> · Mean RT (correct): <strong>0.00 s</strong>
+    </div>
+
+    <p class="hint-text">
+      Suggested use:
+      <br>
+      • Keep your head still and let your eyes scan across the panels.
+      <br>
+      • Ask yourself which panel seems to contain a nearly closed loop, even though the contour is broken into short dashes.
+      <br>
+      • Click the panel that feels like it completes into one coherent shape. At higher difficulty the loop is rougher and
+      there are more panels, so you rely more on global contour completion than on obvious circular symmetry.
+    </p>
+  </div>
+
+  <script>
+    (function () {
+      const panelsContainer = document.getElementById("panels");
+      const difficultyRange = document.getElementById("difficultyRange");
+      const difficultyValue = document.getElementById("difficultyValue");
+      const nextTrialBtn = document.getElementById("nextTrialBtn");
+      const resetStatsBtn = document.getElementById("resetStatsBtn");
+      const statusLine = document.getElementById("statusLine");
+
+      let panels = [];
+      let targetIndex = -1;
+      let trialActive = false;
+      let trialStartTime = null;
+
+      let stats = {
+        trials: 0,
+        correct: 0,
+        correctRTs: []
+      };
+
+      function updateDifficultyBadge() {
+        const v = parseInt(difficultyRange.value, 10);
+        const labels = {
+          1: "1 easy",
+          2: "2",
+          3: "3 medium",
+          4: "4",
+          5: "5 hard"
+        };
+        difficultyValue.textContent = labels[v] || String(v);
+      }
+
+      function createPanels(count) {
+        panelsContainer.innerHTML = "";
+        panels = [];
+        for (let i = 0; i < count; i++) {
+          const panel = document.createElement("div");
+          panel.className = "panel";
+          panel.dataset.index = i.toString();
+
+          const idxLabel = document.createElement("div");
+          idxLabel.className = "panel-index";
+          idxLabel.textContent = String(i + 1);
+          panel.appendChild(idxLabel);
+
+          panel.addEventListener("click", handlePanelClick);
+          panelsContainer.appendChild(panel);
+          panels.push(panel);
+        }
+      }
+
+      function clearPanelFragments(panel) {
+        const children = Array.from(panel.children);
+        for (const child of children) {
+          if (!child.classList.contains("panel-index")) {
+            panel.removeChild(child);
+          }
+        }
+        panel.classList.remove("panel-correct", "panel-incorrect", "panel-target");
+      }
+
+      function randomRange(min, max) {
+        return min + Math.random() * (max - min);
+      }
+
+      function drawTargetLoop(panel, difficulty) {
+        clearPanelFragments(panel);
+
+        // Known panel size from layout
+        const rect = panel.getBoundingClientRect();
+        const width = rect.width || 170;
+        const height = rect.height || 170;
+
+        const cx = width / 2;
+        const cy = height / 2;
+
+        // Base parameters tuned by difficulty
+        let segmentCount;
+        let radius;
+        let angleJitter;
+        let omitProb;
+        let lengthBase;
+
+        switch (difficulty) {
+          case 1:
+            segmentCount = 26;
+            radius = Math.min(width, height) * 0.32;
+            angleJitter = 3 * Math.PI / 180;
+            omitProb = 0.15;
+            lengthBase = 26;
+            break;
+          case 2:
+            segmentCount = 24;
+            radius = Math.min(width, height) * 0.33;
+            angleJitter = 6 * Math.PI / 180;
+            omitProb = 0.22;
+            lengthBase = 24;
+            break;
+          case 3:
+            segmentCount = 22;
+            radius = Math.min(width, height) * 0.34;
+            angleJitter = 9 * Math.PI / 180;
+            omitProb = 0.3;
+            lengthBase = 22;
+            break;
+          case 4:
+            segmentCount = 20;
+            radius = Math.min(width, height) * 0.35;
+            angleJitter = 13 * Math.PI / 180;
+            omitProb = 0.38;
+            lengthBase = 20;
+            break;
+          case 5:
+          default:
+            segmentCount = 18;
+            radius = Math.min(width, height) * 0.36;
+            angleJitter = 18 * Math.PI / 180;
+            omitProb = 0.45;
+            lengthBase = 18;
+            break;
+        }
+
+        for (let i = 0; i < segmentCount; i++) {
+          if (Math.random() < omitProb) {
+            continue;
+          }
+
+          const baseAngle = (2 * Math.PI * i) / segmentCount;
+          const angle = baseAngle + randomRange(-angleJitter, angleJitter);
+          const lenJitter = randomRange(-3, 3);
+          const length = lengthBase + lenJitter;
+
+          const x = cx + radius * Math.cos(angle);
+          const y = cy + radius * Math.sin(angle);
+          const angleDeg = angle * 180 / Math.PI;
+
+          const seg = document.createElement("div");
+          seg.className = "seg";
+          seg.style.width = length + "px";
+          seg.style.left = x + "px";
+          seg.style.top = y + "px";
+          seg.style.transform = "translate(-50%, -50%) rotate(" + (angleDeg + 90) + "deg)";
+
+          panel.appendChild(seg);
+        }
+      }
+
+      function drawDistractor(panel, difficulty) {
+        clearPanelFragments(panel);
+
+        const rect = panel.getBoundingClientRect();
+        const width = rect.width || 170;
+        const height = rect.height || 170;
+
+        let segmentCountBase;
+        switch (difficulty) {
+          case 1:
+            segmentCountBase = 18;
+            break;
+          case 2:
+            segmentCountBase = 22;
+            break;
+          case 3:
+            segmentCountBase = 24;
+            break;
+          case 4:
+            segmentCountBase = 26;
+            break;
+          case 5:
+          default:
+            segmentCountBase = 28;
+            break;
+        }
+
+        const segmentCount = segmentCountBase + Math.round(randomRange(-3, 3));
+
+        for (let i = 0; i < segmentCount; i++) {
+          const seg = document.createElement("div");
+          seg.className = "seg";
+
+          const len = randomRange(14, 26);
+          seg.style.width = len + "px";
+
+          const margin = 14;
+          const x = randomRange(margin, width - margin);
+          const y = randomRange(margin, height - margin);
+          seg.style.left = x + "px";
+          seg.style.top = y + "px";
+
+          const angleDeg = randomRange(0, 180);
+          seg.style.transform = "translate(-50%, -50%) rotate(" + angleDeg + "deg)";
+
+          // Slightly lower contrast at high difficulty to reduce pop out
+          if (difficulty >= 4 && Math.random() < 0.4) {
+            seg.style.opacity = "0.6";
+          }
+
+          panel.appendChild(seg);
+        }
+      }
+
+      function configurePanelsForDifficulty(difficulty) {
+        let panelCount;
+        switch (difficulty) {
+          case 1:
+            panelCount = 3;
+            break;
+          case 2:
+            panelCount = 4;
+            break;
+          case 3:
+            panelCount = 5;
+            break;
+          case 4:
+            panelCount = 6;
+            break;
+          case 5:
+          default:
+            panelCount = 7;
+            break;
+        }
+        createPanels(panelCount);
+      }
+
+      function startTrial() {
+        const difficulty = parseInt(difficultyRange.value, 10);
+
+        configurePanelsForDifficulty(difficulty);
+
+        // After reconfiguring panels, we need to draw target and distractors
+        const count = panels.length;
+        targetIndex = Math.floor(Math.random() * count);
+
+        for (let i = 0; i < count; i++) {
+          if (i === targetIndex) {
+            drawTargetLoop(panels[i], difficulty);
+          } else {
+            drawDistractor(panels[i], difficulty);
+          }
+        }
+
+        trialActive = true;
+        trialStartTime = performance.now();
+
+        updateStatusText("New trial. Click the panel whose fragments form a smooth loop.");
+      }
+
+      function handlePanelClick(event) {
+        if (!trialActive) return;
+        const panel = event.currentTarget;
+        const chosenIndex = parseInt(panel.dataset.index, 10);
+
+        trialActive = false;
+        const now = performance.now();
+        const rt = (now - trialStartTime) / 1000;
+
+        stats.trials += 1;
+
+        const truePanel = panels[targetIndex];
+
+        if (chosenIndex === targetIndex) {
+          stats.correct += 1;
+          stats.correctRTs.push(rt);
+          panel.classList.add("panel-correct");
+        } else {
+          panel.classList.add("panel-incorrect");
+          truePanel.classList.add("panel-target");
+        }
+
+        updateStatusTextResult(rt, chosenIndex === targetIndex);
+      }
+
+      function updateStatusText(message) {
+        const acc = stats.trials > 0 ? (stats.correct / stats.trials * 100) : 0;
+        let meanRT = 0;
+        if (stats.correctRTs.length > 0) {
+          const sum = stats.correctRTs.reduce((a, b) => a + b, 0);
+          meanRT = sum / stats.correctRTs.length;
+        }
+
+        statusLine.innerHTML =
+          (message || "") +
+          " Trials: <strong>" + stats.trials +
+          "</strong> · Correct: <strong>" + stats.correct +
+          "</strong> · Accuracy: <strong>" + acc.toFixed(1) +
+          "%</strong> · Mean RT (correct): <strong>" + meanRT.toFixed(2) + " s</strong>";
+      }
+
+      function updateStatusTextResult(rt, correct) {
+        const baseMsg = correct
+          ? "Correct. RT: <strong>" + rt.toFixed(2) + " s</strong>. "
+          : "Incorrect. RT: <strong>" + rt.toFixed(2) + " s</strong>. ";
+        updateStatusText(baseMsg + "Press Next trial for another contour.");
+      }
+
+      function resetStats() {
+        stats = {
+          trials: 0,
+          correct: 0,
+          correctRTs: []
+        };
+        updateStatusText("Stats reset.");
+      }
+
+      difficultyRange.addEventListener("input", function () {
+        updateDifficultyBadge();
+      });
+
+      nextTrialBtn.addEventListener("click", function () {
+        startTrial();
+      });
+
+      resetStatsBtn.addEventListener("click", function () {
+        resetStats();
+      });
+
+      window.addEventListener("resize", function () {
+        // On resize, if a trial is active, regenerate current trial at same difficulty
+        if (trialActive) {
+          startTrial();
+        }
+      });
+
+      // Initial setup
+      updateDifficultyBadge();
+      configurePanelsForDifficulty(parseInt(difficultyRange.value, 10));
+      updateStatusText("Press Next trial to begin. Pick the panel whose fragments complete to a loop.");
+
+    })();
+  </script>
+</body>
+</html>

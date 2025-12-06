@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Visual Tracking - Puck Man Smooth Pursuit</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      margin: 0;
+      padding: 1rem;
+      background: #111;
+      color: #f5f5f5;
+    }
+
+    h1 {
+      font-size: 1.4rem;
+      margin-bottom: 0.5rem;
+    }
+
+    .note {
+      font-size: 0.85rem;
+      max-width: 48rem;
+      margin-bottom: 0.75rem;
+      color: #ccc;
+    }
+
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      align-items: center;
+      margin-bottom: 0.75rem;
+    }
+
+    .controls-group {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      align-items: center;
+    }
+
+    label {
+      font-size: 0.9rem;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+    }
+
+    input[type="range"] {
+      width: 160px;
+    }
+
+    button {
+      padding: 0.35rem 0.7rem;
+      font-size: 0.9rem;
+      cursor: pointer;
+      border-radius: 4px;
+      border: 1px solid #555;
+      background: #222;
+      color: #f5f5f5;
+    }
+
+    button:hover {
+      background: #333;
+    }
+
+    .value-badge {
+      display: inline-block;
+      padding: 0.1rem 0.35rem;
+      border-radius: 999px;
+      border: 1px solid #555;
+      font-size: 0.8rem;
+      min-width: 3rem;
+      text-align: center;
+      background: rgba(255, 255, 255, 0.02);
+    }
+
+    .workspace {
+      position: relative;
+      width: 100%;
+      max-width: 960px;
+      height: 400px;
+      margin: 0 auto;
+      border-radius: 6px;
+      border: 2px solid #444;
+      background: #000;
+      overflow: hidden;
+    }
+
+    .center-cross {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: 40px;
+      height: 40px;
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+      opacity: 0.12;
+    }
+
+    .center-cross::before,
+    .center-cross::after {
+      content: "";
+      position: absolute;
+      background: rgba(200, 200, 200, 0.4);
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+    }
+
+    .center-cross::before {
+      width: 2px;
+      height: 100%;
+    }
+
+    .center-cross::after {
+      width: 100%;
+      height: 2px;
+    }
+
+    .edge-label {
+      position: absolute;
+      color: #888;
+      font-size: 0.8rem;
+      pointer-events: none;
+    }
+
+    .edge-label.left {
+      top: 50%;
+      left: 4px;
+      transform: translateY(-50%);
+    }
+
+    .edge-label.right {
+      top: 50%;
+      right: 4px;
+      transform: translateY(-50%);
+    }
+
+    .edge-label.top {
+      top: 4px;
+      left: 50%;
+      transform: translateX(-50%);
+    }
+
+    .edge-label.bottom {
+      bottom: 4px;
+      left: 50%;
+      transform: translateX(-50%);
+    }
+
+    .puck {
+      position: absolute;
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      background: #ffd966;
+      box-shadow: 0 0 8px rgba(255, 217, 102, 0.9);
+      transform: translate(-50%, -50%) rotate(0deg);
+      transform-origin: 50% 50%;
+      overflow: hidden;
+    }
+
+    .puck-mouth {
+      position: absolute;
+      width: 120%;
+      height: 120%;
+      top: 50%;
+      left: 50%;
+      background: #000;
+      transform-origin: 0% 50%;
+      transform: translate(-5%, -50%);
+      clip-path: polygon(0 50%, 100% 50%, 100% 50%);
+      opacity: 0.96;
+    }
+
+    .status-line {
+      margin-top: 0.5rem;
+      font-size: 0.85rem;
+      text-align: center;
+      color: #ccc;
+    }
+
+    .status-line strong {
+      color: #ffd966;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      * {
+        scroll-behavior: auto !important;
+        transition: none !important;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <h1>Visual Tracking - Puck Man Smooth Pursuit</h1>
+
+  <p class="note">
+    This mode is like a small between-level scene: the puck wanders around in smooth, somewhat unpredictable paths.
+    The idea is to follow it with your eyes while keeping your head still.
+    This is an experiment, not a treatment plan. Stop if you get strong eye strain, headache, nausea, or worrying visual changes.
+  </p>
+
+  <div class="controls">
+    <div class="controls-group">
+      <label>
+        Speed:
+        <input type="range" id="speedRange" min="20" max="180" value="80">
+      </label>
+      <span class="value-badge" id="speedValue">80 px/s</span>
+    </div>
+
+    <div class="controls-group">
+      <label>
+        Avg turn interval:
+        <input type="range" id="turnRange" min="1" max="6" value="3">
+      </label>
+      <span class="value-badge" id="turnValue">3 s</span>
+    </div>
+
+    <div class="controls-group">
+      <button id="startBtn">Start</button>
+      <button id="stopBtn">Stop</button>
+      <button id="resetBtn">Reset position</button>
+    </div>
+  </div>
+
+  <div class="workspace" id="workspace">
+    <div class="center-cross"></div>
+
+    <div class="edge-label left">← keep head still</div>
+    <div class="edge-label right">keep head still →</div>
+    <div class="edge-label top">↑ keep head still</div>
+    <div class="edge-label bottom">keep head still ↓</div>
+
+    <div class="puck" id="puck">
+      <div class="puck-mouth" id="puckMouth"></div>
+    </div>
+  </div>
+
+  <div class="status-line" id="statusLine">
+    Idle. Press <strong>Start</strong> for smooth pursuit.
+  </div>
+
+  <script>
+    (function () {
+      const workspace = document.getElementById("workspace");
+      const puck = document.getElementById("puck");
+      const puckMouth = document.getElementById("puckMouth");
+      const statusLine = document.getElementById("statusLine");
+
+      const speedRange = document.getElementById("speedRange");
+      const speedValue = document.getElementById("speedValue");
+      const turnRange = document.getElementById("turnRange");
+      const turnValue = document.getElementById("turnValue");
+
+      const startBtn = document.getElementById("startBtn");
+      const stopBtn = document.getElementById("stopBtn");
+      const resetBtn = document.getElementById("resetBtn");
+
+      let running = false;
+      let requestId = null;
+
+      let posX = 0;
+      let posY = 0;
+      let velX = 0;
+      let velY = 0;
+      let targetX = 0;
+      let targetY = 0;
+
+      let lastTimestamp = null;
+      let sessionStartTime = null;
+      let timeAccumulator = 0;
+
+      function updateSpeedDisplay() {
+        const val = parseInt(speedRange.value, 10) || 80;
+        speedValue.textContent = val + " px/s";
+      }
+
+      function updateTurnDisplay() {
+        const val = parseInt(turnRange.value, 10) || 3;
+        turnValue.textContent = val + " s";
+      }
+
+      function clampToWorkspace(x, y, margin) {
+        const rect = workspace.getBoundingClientRect();
+        const minX = margin;
+        const maxX = rect.width - margin;
+        const minY = margin;
+        const maxY = rect.height - margin;
+        return {
+          x: Math.min(Math.max(x, minX), maxX),
+          y: Math.min(Math.max(y, minY), maxY)
+        };
+      }
+
+      function setInitialPosition() {
+        const rect = workspace.getBoundingClientRect();
+        posX = rect.width / 2;
+        posY = rect.height / 2;
+
+        // Initial random direction
+        chooseNewTarget(true);
+        placePuck();
+        sessionStartTime = null;
+        timeAccumulator = 0;
+        updateStatus("Idle. Press Start for smooth pursuit.");
+      }
+
+      function chooseNewTarget(forceFar) {
+        const rect = workspace.getBoundingClientRect();
+        const margin = 30;
+        const speed = parseFloat(speedRange.value) || 80;
+        const avgTurn = Math.max(0.5, Math.min(6, parseFloat(turnRange.value) || 3));
+
+        const minTime = avgTurn * 0.5;
+        const maxTime = avgTurn * 1.5;
+        const timeToNext = minTime + Math.random() * (maxTime - minTime);
+        const distance = speed * timeToNext;
+
+        let attempts = 0;
+        let newX = posX;
+        let newY = posY;
+
+        const maxRadius = Math.sqrt(rect.width * rect.width + rect.height * rect.height) * 0.6;
+        const desiredDist = Math.min(distance, maxRadius);
+
+        while (attempts < 20) {
+          const angle = Math.random() * Math.PI * 2;
+          const r = forceFar
+            ? desiredDist * 0.7
+            : desiredDist * (0.4 + 0.6 * Math.random());
+          newX = posX + Math.cos(angle) * r;
+          newY = posY + Math.sin(angle) * r;
+
+          const clamped = clampToWorkspace(newX, newY, margin);
+          newX = clamped.x;
+          newY = clamped.y;
+
+          const dx = newX - posX;
+          const dy = newY - posY;
+          const d2 = dx * dx + dy * dy;
+
+          if (d2 > 400) {
+            break;
+          }
+          attempts++;
+        }
+
+        targetX = newX;
+        targetY = newY;
+
+        const dx = targetX - posX;
+        const dy = targetY - posY;
+        const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+        const vx = dx / dist * speed;
+        const vy = dy / dist * speed;
+
+        velX = vx;
+        velY = vy;
+      }
+
+      function placePuck() {
+        puck.style.left = posX + "px";
+        puck.style.top = posY + "px";
+
+        const angleRad = Math.atan2(velY, velX);
+        const angleDeg = angleRad * 180 / Math.PI;
+        puck.style.transform = "translate(-50%, -50%) rotate(" + angleDeg + "deg)";
+      }
+
+      function animateMouth(dt) {
+        timeAccumulator += dt;
+        const chewHz = 2.5;
+        const phase = 2 * Math.PI * chewHz * timeAccumulator;
+        const opennessFactor = Math.abs(Math.sin(phase));
+        const minAngle = 4;
+        const maxAngle = 32;
+        const spread = minAngle + (maxAngle - minAngle) * opennessFactor;
+
+        const topY = 50 - spread;
+        const bottomY = 50 + spread;
+
+        puckMouth.style.clipPath =
+          "polygon(0 50%, 100% " + topY + "%, 100% " + bottomY + "%)";
+      }
+
+      function updateStatus(prefix) {
+        if (!sessionStartTime) {
+          statusLine.textContent = prefix;
+          return;
+        }
+        const elapsed = (performance.now() - sessionStartTime) / 1000;
+        statusLine.innerHTML =
+          (prefix || "Active.") +
+          " Session time: <strong>" + elapsed.toFixed(1) + " s</strong>" +
+          " · Speed: <strong>" + (parseInt(speedRange.value, 10) || 80) + " px/s</strong>" +
+          " · Avg turn: <strong>" + (parseInt(turnRange.value, 10) || 3) + " s</strong>";
+      }
+
+      function start() {
+        if (running) return;
+        running = true;
+        lastTimestamp = null;
+        if (!sessionStartTime) {
+          sessionStartTime = performance.now();
+        }
+        updateStatus("Active.");
+        requestId = requestAnimationFrame(step);
+      }
+
+      function stop() {
+        running = false;
+        if (requestId != null) {
+          cancelAnimationFrame(requestId);
+          requestId = null;
+        }
+        updateStatus("Stopped.");
+      }
+
+      function step(timestamp) {
+        if (!running) return;
+
+        if (lastTimestamp == null) {
+          lastTimestamp = timestamp;
+        }
+        const dt = (timestamp - lastTimestamp) / 1000;
+        lastTimestamp = timestamp;
+
+        const dxTarget = targetX - posX;
+        const dyTarget = targetY - posY;
+        const distToTarget = Math.sqrt(dxTarget * dxTarget + dyTarget * dyTarget);
+
+        const speed = Math.sqrt(velX * velX + velY * velY) || (parseFloat(speedRange.value) || 80);
+        const maxStep = speed * dt;
+
+        if (distToTarget <= maxStep + 1) {
+          posX = targetX;
+          posY = targetY;
+          chooseNewTarget(false);
+        } else {
+          posX += velX * dt;
+          posY += velY * dt;
+        }
+
+        const rect = workspace.getBoundingClientRect();
+        const margin = 15;
+        const clamped = clampToWorkspace(posX, posY, margin);
+        posX = clamped.x;
+        posY = clamped.y;
+
+        placePuck();
+        animateMouth(dt);
+        updateStatus("Active.");
+
+        requestId = requestAnimationFrame(step);
+      }
+
+      speedRange.addEventListener("input", function () {
+        updateSpeedDisplay();
+      });
+
+      turnRange.addEventListener("input", function () {
+        updateTurnDisplay();
+      });
+
+      startBtn.addEventListener("click", start);
+      stopBtn.addEventListener("click", stop);
+
+      resetBtn.addEventListener("click", function () {
+        stop();
+        setInitialPosition();
+      });
+
+      window.addEventListener("resize", function () {
+        setInitialPosition();
+      });
+
+      updateSpeedDisplay();
+      updateTurnDisplay();
+      setInitialPosition();
+    })();
+  </script>
+
+</body>
+</html>

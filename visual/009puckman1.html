@@ -1,0 +1,575 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Visual Tracking - Puck Man Loop</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      margin: 0;
+      padding: 1rem;
+      background: #111;
+      color: #f5f5f5;
+    }
+
+    h1 {
+      font-size: 1.4rem;
+      margin-bottom: 0.5rem;
+    }
+
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      align-items: center;
+      margin-bottom: 0.5rem;
+    }
+
+    label {
+      font-size: 0.9rem;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.25rem;
+    }
+
+    input[type="number"],
+    select {
+      padding: 0.25rem 0.4rem;
+      font-size: 0.9rem;
+    }
+
+    button {
+      padding: 0.35rem 0.7rem;
+      font-size: 0.9rem;
+      cursor: pointer;
+      border-radius: 4px;
+      border: 1px solid #555;
+      background: #222;
+      color: #f5f5f5;
+    }
+
+    button:hover {
+      background: #333;
+    }
+
+    .preset-buttons {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.4rem;
+      margin-bottom: 0.75rem;
+    }
+
+    .preset-buttons button {
+      font-size: 0.8rem;
+      padding: 0.3rem 0.6rem;
+    }
+
+    .note {
+      font-size: 0.85rem;
+      max-width: 48rem;
+      margin-bottom: 0.75rem;
+      color: #ccc;
+    }
+
+    .viewport {
+      position: relative;
+      width: 100%;
+      max-width: 960px;
+      height: 400px;
+      margin: 0 auto;
+      border: 2px solid #444;
+      border-radius: 6px;
+      background: #000;
+      overflow: hidden;
+    }
+
+    .track {
+      position: absolute;
+      border: 1px dashed rgba(200, 200, 200, 0.25);
+      box-sizing: border-box;
+    }
+
+    .dot {
+      position: absolute;
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #eee;
+      transform: translate(-50%, -50%);
+      transition: opacity 0.15s ease, transform 0.15s ease;
+    }
+
+    .dot.eaten {
+      opacity: 0.1;
+      transform: translate(-50%, -50%) scale(0.6);
+    }
+
+    .puck {
+      position: absolute;
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      background: #ffd966;
+      box-shadow: 0 0 8px rgba(255, 217, 102, 0.9);
+      transform: translate(-50%, -50%);
+      overflow: hidden;
+    }
+
+    .puck-mouth {
+      position: absolute;
+      width: 120%;
+      height: 120%;
+      top: 50%;
+      left: 50%;
+      background: #000;
+      transform-origin: 0% 50%;
+      transform: rotate(0deg) translate(-5%, -50%);
+      clip-path: polygon(0 50%, 100% 50%, 100% 50%);
+      opacity: 0.96;
+    }
+
+    .edge-label {
+      position: absolute;
+      color: #888;
+      font-size: 0.8rem;
+      pointer-events: none;
+    }
+
+    .edge-label.left {
+      top: 50%;
+      left: 4px;
+      transform: translateY(-50%);
+    }
+
+    .edge-label.right {
+      top: 50%;
+      right: 4px;
+      transform: translateY(-50%);
+    }
+
+    .edge-label.top {
+      top: 4px;
+      left: 50%;
+      transform: translateX(-50%);
+    }
+
+    .edge-label.bottom {
+      bottom: 4px;
+      left: 50%;
+      transform: translateX(-50%);
+    }
+
+    .status-line {
+      margin-top: 0.5rem;
+      font-size: 0.85rem;
+      text-align: center;
+      color: #ccc;
+    }
+
+    .status-line strong {
+      color: #ffd966;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      * {
+        scroll-behavior: auto !important;
+        transition: none !important;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <h1>Visual Tracking - Puck Man Loop</h1>
+
+  <p class="note">
+    Keep your head as still as possible and follow the yellow puck with your eyes.
+    Adjust the path, speed, and laps to set up repetitions.
+    This is a prototype, not a medical tool.
+  </p>
+
+  <div class="controls">
+    <label>
+      Track mode:
+      <select id="modeSelect">
+        <option value="loop">Rectangular loop</option>
+        <option value="horizontal">Horizontal line</option>
+        <option value="vertical">Vertical line</option>
+      </select>
+    </label>
+
+    <label>
+      Speed (laps per minute):
+      <input type="number" id="speedInput" min="2" max="60" value="12">
+    </label>
+
+    <label>
+      Laps:
+      <input type="number" id="lapsInput" min="1" max="50" value="5">
+    </label>
+
+    <label>
+      Path size (% of viewport):
+      <input type="number" id="pathSizeInput" min="30" max="90" value="70">
+    </label>
+
+    <label>
+      Dots per lap:
+      <input type="number" id="dotsInput" min="4" max="80" value="20">
+    </label>
+
+    <button id="startBtn">Start</button>
+    <button id="stopBtn">Stop</button>
+    <button id="resetBtn">Reset dots</button>
+  </div>
+
+  <div class="preset-buttons">
+    <button id="presetSimpleLR">Simple L–R line</button>
+    <button id="presetLoopBox">Rectangular loop</button>
+    <button id="presetUpDown">Up–down line</button>
+  </div>
+
+  <div class="viewport" id="viewport">
+    <div class="track" id="track"></div>
+
+    <div class="edge-label left">← keep head still</div>
+    <div class="edge-label right">keep head still →</div>
+    <div class="edge-label top">↑ keep head still</div>
+    <div class="edge-label bottom">keep head still ↓</div>
+
+    <div class="puck" id="puck">
+      <div class="puck-mouth" id="puckMouth"></div>
+    </div>
+  </div>
+
+  <div class="status-line" id="statusLine">
+    Idle. Choose a track or press <strong>Start</strong>.
+  </div>
+
+  <script>
+    (function () {
+      const viewport = document.getElementById("viewport");
+      const trackEl = document.getElementById("track");
+      const puck = document.getElementById("puck");
+      const puckMouth = document.getElementById("puckMouth");
+      const statusLine = document.getElementById("statusLine");
+
+      const modeSelect = document.getElementById("modeSelect");
+      const speedInput = document.getElementById("speedInput");
+      const lapsInput = document.getElementById("lapsInput");
+      const pathSizeInput = document.getElementById("pathSizeInput");
+      const dotsInput = document.getElementById("dotsInput");
+      const startBtn = document.getElementById("startBtn");
+      const stopBtn = document.getElementById("stopBtn");
+      const resetBtn = document.getElementById("resetBtn");
+
+      const presetSimpleLR = document.getElementById("presetSimpleLR");
+      const presetLoopBox = document.getElementById("presetLoopBox");
+      const presetUpDown = document.getElementById("presetUpDown");
+
+      let running = false;
+      let requestId = null;
+      let lastTimestamp = null;
+
+      let pathInfo = null; // { perimeter, segments, dots: [] }
+      let distance = 0;    // current distance along path
+      let prevDistance = 0;
+      let lapsCompleted = 0;
+      let targetLaps = 5;
+      let totalDots = 0;
+      let dotsEaten = 0;
+
+      function buildPath() {
+        const rect = viewport.getBoundingClientRect();
+        const mode = modeSelect.value;
+        const sizePercent = Math.max(30, Math.min(90, parseFloat(pathSizeInput.value) || 70)) / 100;
+
+        const width = rect.width * sizePercent;
+        const height = rect.height * sizePercent;
+        const centerX = rect.width / 2;
+        const centerY = rect.height / 2;
+        const left = centerX - width / 2;
+        const top = centerY - height / 2;
+
+        // track geometry
+        if (mode === "loop") {
+          trackEl.style.display = "block";
+          trackEl.style.left = left + "px";
+          trackEl.style.top = top + "px";
+          trackEl.style.width = width + "px";
+          trackEl.style.height = height + "px";
+        } else if (mode === "horizontal") {
+          trackEl.style.display = "block";
+          trackEl.style.left = left + "px";
+          trackEl.style.top = (centerY - 1) + "px";
+          trackEl.style.width = width + "px";
+          trackEl.style.height = "2px";
+        } else if (mode === "vertical") {
+          trackEl.style.display = "block";
+          trackEl.style.left = (centerX - 1) + "px";
+          trackEl.style.top = top + "px";
+          trackEl.style.width = "2px";
+          trackEl.style.height = height + "px";
+        }
+
+        // segments for path traversal
+        const segments = [];
+        if (mode === "loop") {
+          // top edge: left to right
+          segments.push({ x1: left, y1: top, x2: left + width, y2: top });
+          // right edge: top to bottom
+          segments.push({ x1: left + width, y1: top, x2: left + width, y2: top + height });
+          // bottom edge: right to left
+          segments.push({ x1: left + width, y1: top + height, x2: left, y2: top + height });
+          // left edge: bottom to top
+          segments.push({ x1: left, y1: top + height, x2: left, y2: top });
+        } else if (mode === "horizontal") {
+          // left to right
+          segments.push({ x1: left, y1: centerY, x2: left + width, y2: centerY });
+          // back right to left
+          segments.push({ x1: left + width, y1: centerY, x2: left, y2: centerY });
+        } else if (mode === "vertical") {
+          // top to bottom
+          segments.push({ x1: centerX, y1: top, x2: centerX, y2: top + height });
+          // back bottom to top
+          segments.push({ x1: centerX, y1: top + height, x2: centerX, y2: top });
+        }
+
+        // segment lengths and perimeter
+        let totalPerimeter = 0;
+        for (const seg of segments) {
+          const dx = seg.x2 - seg.x1;
+          const dy = seg.y2 - seg.y1;
+          seg.length = Math.sqrt(dx * dx + dy * dy);
+          seg.startLength = totalPerimeter;
+          totalPerimeter += seg.length;
+        }
+
+        // create dots
+        const numDots = Math.max(4, Math.min(80, parseInt(dotsInput.value, 10) || 20));
+        viewport.querySelectorAll(".dot").forEach(d => d.remove());
+        const dots = [];
+        for (let i = 0; i < numDots; i++) {
+          const s = totalPerimeter * (i / numDots);
+          const pos = positionAlongPath(segments, totalPerimeter, s);
+          const dotEl = document.createElement("div");
+          dotEl.className = "dot";
+          dotEl.style.left = pos.x + "px";
+          dotEl.style.top = pos.y + "px";
+          dotEl.dataset.s = s.toString();
+          viewport.appendChild(dotEl);
+          dots.push({ s: s, el: dotEl, eaten: false });
+        }
+
+        totalDots = dots.length;
+        dotsEaten = 0;
+
+        pathInfo = {
+          segments: segments,
+          perimeter: totalPerimeter,
+          dots: dots
+        };
+
+        // reset puck position
+        distance = 0;
+        prevDistance = 0;
+        lapsCompleted = 0;
+        const startPos = positionAlongPath(segments, totalPerimeter, 0);
+        placePuck(startPos);
+        updateStatus();
+      }
+
+      function positionAlongPath(segments, perimeter, s) {
+        let d = s % perimeter;
+        for (const seg of segments) {
+          if (d <= seg.startLength + seg.length) {
+            const local = d - seg.startLength;
+            const t = seg.length ? (local / seg.length) : 0;
+            const x = seg.x1 + (seg.x2 - seg.x1) * t;
+            const y = seg.y1 + (seg.y2 - seg.y1) * t;
+            return { x, y, seg, t };
+          }
+        }
+        const last = segments[segments.length - 1];
+        return { x: last.x2, y: last.y2, seg: last, t: 1 };
+      }
+
+      function placePuck(pos) {
+        puck.style.left = pos.x + "px";
+        puck.style.top = pos.y + "px";
+        orientMouth(pos.seg);
+      }
+
+      function orientMouth(seg) {
+        const dx = seg.x2 - seg.x1;
+        const dy = seg.y2 - seg.y1;
+        const angleRad = Math.atan2(dy, dx);
+        const angleDeg = angleRad * 180 / Math.PI;
+        // rotate wedge so it faces movement direction
+        puckMouth.style.transform = "rotate(" + angleDeg + "deg) translate(-5%, -50%)";
+      }
+
+      function resetDots() {
+        if (!pathInfo) return;
+        pathInfo.dots.forEach(d => {
+          d.eaten = false;
+          d.el.classList.remove("eaten");
+        });
+        dotsEaten = 0;
+        updateStatus();
+      }
+
+      function start() {
+        if (running) return;
+        targetLaps = Math.max(1, Math.min(50, parseInt(lapsInput.value, 10) || 5));
+        buildPath();
+        running = true;
+        lastTimestamp = null;
+        statusLine.textContent = "Running. Follow the puck with your eyes.";
+        requestId = requestAnimationFrame(step);
+      }
+
+      function stop() {
+        running = false;
+        if (requestId !== null) {
+          cancelAnimationFrame(requestId);
+          requestId = null;
+        }
+        updateStatus(true);
+      }
+
+      function step(timestamp) {
+        if (!running || !pathInfo) return;
+
+        if (lastTimestamp == null) {
+          lastTimestamp = timestamp;
+        }
+        const dt = (timestamp - lastTimestamp) / 1000;
+        lastTimestamp = timestamp;
+
+        const perimeter = pathInfo.perimeter;
+        if (perimeter <= 0) {
+          requestId = requestAnimationFrame(step);
+          return;
+        }
+
+        const lapsPerMinute = Math.max(0.5, Math.min(60, parseFloat(speedInput.value) || 12));
+        const speed = (perimeter * lapsPerMinute) / 60;
+
+        prevDistance = distance;
+        distance += speed * dt;
+
+        // count completed laps
+        while (distance >= perimeter) {
+          distance -= perimeter;
+          lapsCompleted++;
+          if (lapsCompleted >= targetLaps) {
+            const posEnd = positionAlongPath(pathInfo.segments, perimeter, 0);
+            placePuck(posEnd);
+            stop();
+            return;
+          }
+        }
+
+        const pos = positionAlongPath(pathInfo.segments, perimeter, distance);
+        placePuck(pos);
+
+        animateMouth(perimeter);
+        munchDots(perimeter);
+        updateStatus();
+
+        requestId = requestAnimationFrame(step);
+      }
+
+      function animateMouth(perimeter) {
+        if (!pathInfo) return;
+        // chew frequency: 4 mouth cycles per lap
+        const chewCyclesPerLap = 4;
+        const phase = 2 * Math.PI * chewCyclesPerLap * (distance / perimeter);
+        const opennessFactor = Math.abs(Math.sin(phase)); // 0 to 1
+        const minAngle = 4;
+        const maxAngle = 35;
+        const spread = minAngle + (maxAngle - minAngle) * opennessFactor;
+
+        const topY = 50 - spread;
+        const bottomY = 50 + spread;
+
+        // triangle wedge from left center
+        puckMouth.style.clipPath =
+          "polygon(0 50%, 100% " + topY + "%, 100% " + bottomY + "%)";
+      }
+
+      function munchDots(perimeter) {
+        const dots = pathInfo.dots;
+        for (const d of dots) {
+          if (d.eaten) continue;
+          const s = d.s;
+          if (prevDistance <= distance) {
+            // normal
+            if (s > prevDistance && s <= distance) {
+              d.eaten = true;
+              d.el.classList.add("eaten");
+              dotsEaten++;
+            }
+          } else {
+            // wrapped around
+            if (s > prevDistance || s <= distance) {
+              d.eaten = true;
+              d.el.classList.add("eaten");
+              dotsEaten++;
+            }
+          }
+        }
+      }
+
+      function updateStatus(stopped) {
+        const prefix = stopped ? "Stopped." : "Active.";
+        statusLine.innerHTML =
+          prefix +
+          " Laps: <strong>" + lapsCompleted + " / " + targetLaps + "</strong>" +
+          " · Dots eaten: <strong>" + dotsEaten + " / " + totalDots + "</strong>";
+      }
+
+      // Preset helpers
+      function applyPreset(mode, laps, speed, pathSize, dots) {
+        modeSelect.value = mode;
+        if (laps != null) lapsInput.value = laps;
+        if (speed != null) speedInput.value = speed;
+        if (pathSize != null) pathSizeInput.value = pathSize;
+        if (dots != null) dotsInput.value = dots;
+        buildPath();
+        updateStatus(true);
+      }
+
+      startBtn.addEventListener("click", start);
+      stopBtn.addEventListener("click", stop);
+      resetBtn.addEventListener("click", resetDots);
+
+      presetSimpleLR.addEventListener("click", function () {
+        applyPreset("horizontal", 5, 10, 60, 16);
+      });
+
+      presetLoopBox.addEventListener("click", function () {
+        applyPreset("loop", 4, 8, 70, 24);
+      });
+
+      presetUpDown.addEventListener("click", function () {
+        applyPreset("vertical", 5, 10, 60, 16);
+      });
+
+      // Rebuild path on resize
+      window.addEventListener("resize", function () {
+        if (pathInfo) {
+          buildPath();
+        }
+      });
+
+      // initial draw
+      buildPath();
+      updateStatus(true);
+    })();
+  </script>
+
+</body>
+</html>

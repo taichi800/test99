@@ -1,0 +1,676 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Puckman Figure Ground Finder</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      margin: 0;
+      padding: 1rem;
+      background: #111;
+      color: #f5f5f5;
+    }
+
+    h1 {
+      font-size: 1.4rem;
+      margin-bottom: 0.4rem;
+    }
+
+    .note {
+      font-size: 0.85rem;
+      max-width: 50rem;
+      margin-bottom: 0.75rem;
+      color: #ccc;
+    }
+
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      align-items: center;
+      margin-bottom: 0.75rem;
+    }
+
+    label {
+      font-size: 0.9rem;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+    }
+
+    input[type="range"] {
+      width: 160px;
+    }
+
+    button {
+      padding: 0.35rem 0.7rem;
+      font-size: 0.9rem;
+      cursor: pointer;
+      border-radius: 4px;
+      border: 1px solid #555;
+      background: #222;
+      color: #f5f5f5;
+    }
+
+    button:hover {
+      background: #333;
+    }
+
+    .value-badge {
+      display: inline-block;
+      padding: 0.1rem 0.35rem;
+      border-radius: 999px;
+      border: 1px solid #555;
+      font-size: 0.8rem;
+      min-width: 3rem;
+      text-align: center;
+      background: rgba(255, 255, 255, 0.02);
+    }
+
+    .scene-info {
+      font-size: 0.9rem;
+      margin-bottom: 0.4rem;
+    }
+
+    .scene-name {
+      font-weight: bold;
+      color: #ffd966;
+    }
+
+    .workspace-shell {
+      max-width: 960px;
+      margin: 0 auto;
+    }
+
+    .scene {
+      position: relative;
+      width: 100%;
+      height: 420px;
+      border-radius: 8px;
+      border: 2px solid #444;
+      overflow: hidden;
+      cursor: crosshair;
+    }
+
+    /* Shared overlays */
+
+    .scene-guides {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+    }
+
+    .scene-guide-text {
+      position: absolute;
+      font-size: 0.75rem;
+      color: rgba(230, 230, 230, 0.7);
+    }
+
+    .scene-guide-text.top-left {
+      top: 6px;
+      left: 8px;
+    }
+
+    .scene-guide-text.top-right {
+      top: 6px;
+      right: 8px;
+    }
+
+    .scene-guide-text.bottom-left {
+      bottom: 6px;
+      left: 8px;
+    }
+
+    .scene-guide-text.bottom-right {
+      bottom: 6px;
+      right: 8px;
+    }
+
+    /* Puckman */
+
+    .puck {
+      position: absolute;
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      transform: translate(-50%, -50%) rotate(0deg);
+      transform-origin: 50% 50%;
+      box-shadow: 0 0 6px rgba(0, 0, 0, 0.25);
+      overflow: hidden;
+      display: none;
+    }
+
+    .puck-mouth {
+      position: absolute;
+      width: 120%;
+      height: 120%;
+      top: 50%;
+      left: 50%;
+      background: rgba(0, 0, 0, 0.8);
+      transform-origin: 0% 50%;
+      transform: translate(-5%, -50%);
+      clip-path: polygon(0 50%, 100% 30%, 100% 70%);
+      opacity: 0.95;
+    }
+
+    /* Result badge */
+
+    .result-badge {
+      position: absolute;
+      bottom: 10px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0, 0, 0, 0.8);
+      color: #f5f5f5;
+      padding: 0.3rem 0.7rem;
+      border-radius: 999px;
+      font-size: 0.8rem;
+      border: 1px solid rgba(255, 255, 255, 0.3);
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.2s ease;
+      max-width: 90%;
+      text-align: center;
+    }
+
+    .result-badge.visible {
+      opacity: 1;
+    }
+
+    .status-line {
+      margin-top: 0.5rem;
+      font-size: 0.85rem;
+      color: #ccc;
+      text-align: center;
+    }
+
+    .status-line strong {
+      color: #ffd966;
+    }
+
+    /* 21 scene backgrounds */
+
+    .scene-jungle {
+      background:
+        repeating-linear-gradient(120deg, #143d1b 0, #143d1b 8px, #1d5425 8px, #1d5425 16px),
+        radial-gradient(circle at 20% 20%, #2e7d32 0, #0b1b0c 60%);
+    }
+
+    .scene-forest {
+      background:
+        repeating-linear-gradient(90deg, #1b3a29 0, #1b3a29 10px, #102015 10px, #102015 16px),
+        linear-gradient(to bottom, #214f2f, #07140a);
+    }
+
+    .scene-valley {
+      background:
+        linear-gradient(to top, #3d2e21 0, #5a4530 30%, #877f63 55%, #b6d6f5 100%);
+    }
+
+    .scene-desert {
+      background:
+        linear-gradient(to top, #97723f 0, #c79a52 40%, #f5e0a2 70%, #fdf6d8 100%);
+    }
+
+    .scene-city-night {
+      background:
+        radial-gradient(circle at 10% 10%, #303070 0, #050517 50%),
+        repeating-linear-gradient(90deg, rgba(255,255,255,0.08) 0, rgba(255,255,255,0.08) 1px, transparent 1px, transparent 4px);
+    }
+
+    .scene-snowfield {
+      background:
+        linear-gradient(to top, #b7c8df 0, #e5f1ff 40%, #fdfdfd 100%);
+    }
+
+    .scene-ocean-surface {
+      background:
+        linear-gradient(to bottom, #2b5d99 0, #1b3f6e 40%, #081626 100%),
+        repeating-linear-gradient(0deg, rgba(255,255,255,0.12) 0, rgba(255,255,255,0.12) 1px, transparent 1px, transparent 5px);
+    }
+
+    .scene-coral-reef {
+      background:
+        radial-gradient(circle at 10% 80%, #ff8a65 0, transparent 40%),
+        radial-gradient(circle at 80% 20%, #ffca28 0, transparent 35%),
+        linear-gradient(to bottom, #2c8fbf, #053447);
+    }
+
+    .scene-cave {
+      background:
+        radial-gradient(circle at 50% 0%, #4a4a4a 0, transparent 60%),
+        radial-gradient(circle at 0% 100%, #292322 0, transparent 55%),
+        radial-gradient(circle at 100% 100%, #3a2f2d 0, transparent 55%),
+        #090707;
+    }
+
+    .scene-mountain {
+      background:
+        linear-gradient(to top, #2b3038 0, #434c58 40%, #90a4c3 75%, #dae6ff 100%);
+    }
+
+    .scene-swamp {
+      background:
+        linear-gradient(to top, #202a18 0, #3b4b27 40%, #556e3a 60%, #2f3d27 100%);
+    }
+
+    .scene-meadow {
+      background:
+        radial-gradient(circle at 20% 20%, #ffeb99 0, transparent 40%),
+        linear-gradient(to top, #4b8b3b 0, #93c973 40%, #cbe9ff 100%);
+    }
+
+    .scene-space {
+      background:
+        radial-gradient(circle at 10% 20%, #444477 0, transparent 40%),
+        radial-gradient(circle at 80% 70%, #663366 0, transparent 50%),
+        #05030b;
+    }
+
+    .scene-factory {
+      background:
+        repeating-linear-gradient(135deg, #2c2c30 0, #2c2c30 8px, #1c1c20 8px, #1c1c20 16px),
+        linear-gradient(to bottom, #515156, #18181b);
+    }
+
+    .scene-library {
+      background:
+        repeating-linear-gradient(90deg, #5e3b2d 0, #5e3b2d 14px, #3b241b 14px, #3b241b 18px),
+        linear-gradient(to bottom, #7b4a32, #2b1810);
+    }
+
+    .scene-kelp {
+      background:
+        linear-gradient(to bottom, #0c3442 0, #0f4f4b 40%, #06221f 100%);
+    }
+
+    .scene-lava-field {
+      background:
+        radial-gradient(circle at 20% 80%, #ff5722 0, transparent 40%),
+        radial-gradient(circle at 80% 10%, #ff9800 0, transparent 45%),
+        #1a0c0c;
+    }
+
+    .scene-cloudscape {
+      background:
+        radial-gradient(circle at 20% 20%, #ffffff 0, transparent 40%),
+        radial-gradient(circle at 60% 40%, #ffffff 0, transparent 35%),
+        radial-gradient(circle at 30% 80%, #f5f7ff 0, transparent 40%),
+        linear-gradient(to bottom, #c6ddff, #7ba4dd);
+    }
+
+    .scene-ruins {
+      background:
+        linear-gradient(to top, #5b5346 0, #7b705e 40%, #c1b7a6 75%, #ebe4da 100%);
+    }
+
+    .scene-garden-maze {
+      background:
+        repeating-linear-gradient(90deg, #274929 0, #274929 14px, #183019 14px, #183019 22px),
+        repeating-linear-gradient(0deg, rgba(255,255,255,0.05) 0, rgba(255,255,255,0.05) 1px, transparent 1px, transparent 4px);
+    }
+
+    .scene-candy-plateau {
+      background:
+        radial-gradient(circle at 20% 20%, #ff8a80 0, transparent 40%),
+        radial-gradient(circle at 80% 60%, #ffecb3 0, transparent 40%),
+        linear-gradient(to top, #f48fb1, #ce93d8, #90caf9);
+    }
+
+    .scene-cloudy-night-hills {
+      background:
+        radial-gradient(circle at 20% 30%, rgba(255,255,255,0.2) 0, transparent 40%),
+        linear-gradient(to top, #1f2730 0, #10141a 40%, #060810 100%);
+    }
+
+    .scene-sandstone-canyon {
+      background:
+        linear-gradient(120deg, #8c5a3b 0, #b87a4e 40%, #e2a972 80%, #f4d6a7 100%);
+    }
+
+    /* Status text below */
+
+    .hint-text {
+      margin-top: 0.7rem;
+      font-size: 0.8rem;
+      color: #ccc;
+      max-width: 50rem;
+    }
+
+    .hint-text strong {
+      color: #ffd966;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      * {
+        scroll-behavior: auto !important;
+        transition: none !important;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <h1>Puckman Figure Ground Finder</h1>
+
+  <p class="note">
+    On each round, Puckman is camouflaged inside a different environment. Your task is simply to find him
+    and click as fast as you can. Difficulty changes how much he blends into the background.
+    This is a practice and testing tool, not a clinical instrument.
+  </p>
+
+  <div class="controls">
+    <label>
+      Difficulty:
+      <input type="range" id="difficultyRange" min="1" max="5" value="3">
+    </label>
+    <span class="value-badge" id="difficultyValue">3 medium</span>
+
+    <label>
+      Scene mode:
+      <select id="sceneMode">
+        <option value="random">Random scene each round</option>
+        <option value="sequence">Cycle through all scenes</option>
+      </select>
+    </label>
+
+    <button id="startRoundBtn">Start round</button>
+  </div>
+
+  <div class="scene-info">
+    Scene: <span class="scene-name" id="sceneName">none</span>
+    · Click inside the scene to search. Only clicks on Puckman count as hits.
+  </div>
+
+  <div class="workspace-shell">
+    <div class="scene scene-jungle" id="sceneArea">
+      <div class="scene-guides">
+        <div class="scene-guide-text top-left">Keep head still, scan with your eyes.</div>
+        <div class="scene-guide-text bottom-right">Click Puckman when you see him.</div>
+      </div>
+
+      <div class="puck" id="puck">
+        <div class="puck-mouth"></div>
+      </div>
+
+      <div class="result-badge" id="resultBadge">
+        Found.
+      </div>
+    </div>
+
+    <div class="status-line" id="statusLine">
+      Idle. Choose difficulty and press <strong>Start round</strong>.
+    </div>
+
+    <p class="hint-text">
+      Suggested protocol:
+      <br>
+      • Use a moderate difficulty first, then gradually increase blending if it feels comfortable.
+      <br>
+      • Treat each round as one trial: look at the scene, let your eyes explore, then click when you spot Puckman.
+      <br>
+      • If wrong clicks or search time climb sharply, reduce difficulty or stop. Excessive strain or frustration
+      defeats the point of the exercise.
+    </p>
+  </div>
+
+  <script>
+    (function () {
+      const sceneArea = document.getElementById("sceneArea");
+      const puck = document.getElementById("puck");
+      const puckMouth = puck.querySelector(".puck-mouth");
+      const resultBadge = document.getElementById("resultBadge");
+      const statusLine = document.getElementById("statusLine");
+      const sceneNameEl = document.getElementById("sceneName");
+
+      const difficultyRange = document.getElementById("difficultyRange");
+      const difficultyValue = document.getElementById("difficultyValue");
+      const sceneModeSelect = document.getElementById("sceneMode");
+      const startRoundBtn = document.getElementById("startRoundBtn");
+
+      const scenes = [
+        { id: "jungle", label: "Jungle canopy", cssClass: "scene-jungle" },
+        { id: "forest", label: "Dense forest", cssClass: "scene-forest" },
+        { id: "valley", label: "Rocky valley", cssClass: "scene-valley" },
+        { id: "desert", label: "Desert dunes", cssClass: "scene-desert" },
+        { id: "cityNight", label: "City at night", cssClass: "scene-city-night" },
+        { id: "snowfield", label: "Snowfield", cssClass: "scene-snowfield" },
+        { id: "oceanSurface", label: "Ocean surface", cssClass: "scene-ocean-surface" },
+        { id: "coralReef", label: "Coral reef", cssClass: "scene-coral-reef" },
+        { id: "cave", label: "Cave interior", cssClass: "scene-cave" },
+        { id: "mountain", label: "Mountain ridge", cssClass: "scene-mountain" },
+        { id: "swamp", label: "Swamp", cssClass: "scene-swamp" },
+        { id: "meadow", label: "Meadow", cssClass: "scene-meadow" },
+        { id: "space", label: "Space nebula", cssClass: "scene-space" },
+        { id: "factory", label: "Factory floor", cssClass: "scene-factory" },
+        { id: "library", label: "Library shelves", cssClass: "scene-library" },
+        { id: "kelp", label: "Underwater kelp", cssClass: "scene-kelp" },
+        { id: "lavaField", label: "Lava field", cssClass: "scene-lava-field" },
+        { id: "cloudscape", label: "Cloudscape", cssClass: "scene-cloudscape" },
+        { id: "ruins", label: "Ancient ruins", cssClass: "scene-ruins" },
+        { id: "gardenMaze", label: "Garden maze", cssClass: "scene-garden-maze" },
+        { id: "candyPlateau", label: "Candy colored plateau", cssClass: "scene-candy-plateau" },
+        { id: "cloudyNightHills", label: "Cloudy night hills", cssClass: "scene-cloudy-night-hills" },
+        { id: "sandstoneCanyon", label: "Sandstone canyon", cssClass: "scene-sandstone-canyon" }
+      ];
+
+      // Some scenes get custom camouflage colors per difficulty
+      // Fallback uses standard yellow puck.
+      const sceneCamouflage = {
+        jungle: {
+          easy: { fill: "#ffd966", border: "#fff7c0" },
+          medium: { fill: "#9ac34b", border: "#cbe38a" },
+          hard: { fill: "#567b36", border: "#6b9544" }
+        },
+        forest: {
+          easy: { fill: "#ffd966", border: "#fff7c0" },
+          medium: { fill: "#8fb25a", border: "#c6dd88" },
+          hard: { fill: "#47693a", border: "#668a50" }
+        },
+        valley: {
+          easy: { fill: "#ffd966", border: "#fff7c0" },
+          medium: { fill: "#c89a59", border: "#f0d394" },
+          hard: { fill: "#8b6a3d", border: "#b59158" }
+        },
+        desert: {
+          easy: { fill: "#ffd966", border: "#fff7c0" },
+          medium: { fill: "#f0c96a", border: "#f8deb0" },
+          hard: { fill: "#c99d57", border: "#e7c58a" }
+        },
+        snowfield: {
+          easy: { fill: "#ffce54", border: "#fff3bf" },
+          medium: { fill: "#d4e2f5", border: "#f4f8ff" },
+          hard: { fill: "#becadc", border: "#dde6f3" }
+        },
+        oceanSurface: {
+          easy: { fill: "#ffd966", border: "#fff7c0" },
+          medium: { fill: "#4ba6cf", border: "#8fd1f1" },
+          hard: { fill: "#286c8f", border: "#3f8aac" }
+        },
+        coralReef: {
+          easy: { fill: "#ffd966", border: "#fff7c0" },
+          medium: { fill: "#ffb74d", border: "#ffe0b2" },
+          hard: { fill: "#f48f4f", border: "#ffca95" }
+        },
+        cave: {
+          easy: { fill: "#ffd966", border: "#fff7c0" },
+          medium: { fill: "#9f8b50", border: "#d6c58a" },
+          hard: { fill: "#6a5d3a", border: "#918060" }
+        },
+        space: {
+          easy: { fill: "#ffd966", border: "#fff7c0" },
+          medium: { fill: "#a386ff", border: "#d1c4ff" },
+          hard: { fill: "#7c6ab3", border: "#a092d6" }
+        },
+        library: {
+          easy: { fill: "#ffd966", border: "#fff7c0" },
+          medium: { fill: "#c49a5a", border: "#edd3a2" },
+          hard: { fill: "#8d6a3b", border: "#b18a55" }
+        },
+        gardenMaze: {
+          easy: { fill: "#ffd966", border: "#fff7c0" },
+          medium: { fill: "#84bf55", border: "#c2e49b" },
+          hard: { fill: "#43692e", border: "#67934d" }
+        },
+        candyPlateau: {
+          easy: { fill: "#ffd966", border: "#fff7c0" },
+          medium: { fill: "#ffb7a0", border: "#ffe0d3" },
+          hard: { fill: "#f48fb1", border: "#ffc1e3" }
+        }
+      };
+
+      let currentSceneIndex = 0;
+      let currentScene = scenes[0];
+      let roundActive = false;
+      let roundStartTime = null;
+      let errorsThisRound = 0;
+
+      function updateDifficultyBadge() {
+        const v = parseInt(difficultyRange.value, 10);
+        const labels = {
+          1: "1 easy",
+          2: "2",
+          3: "3 medium",
+          4: "4",
+          5: "5 hard"
+        };
+        difficultyValue.textContent = labels[v] || String(v);
+      }
+
+      function pickScene() {
+        const mode = sceneModeSelect.value;
+        if (mode === "random") {
+          const idx = Math.floor(Math.random() * scenes.length);
+          currentSceneIndex = idx;
+          currentScene = scenes[idx];
+        } else {
+          currentSceneIndex = (currentSceneIndex + 1) % scenes.length;
+          currentScene = scenes[currentSceneIndex];
+        }
+
+        // Reset CSS classes
+        sceneArea.className = "scene";
+        sceneArea.classList.add(currentScene.cssClass);
+
+        sceneNameEl.textContent = currentScene.label;
+      }
+
+      function configurePuckAppearance() {
+        const difficulty = parseInt(difficultyRange.value, 10);
+        let level;
+        if (difficulty <= 2) level = "easy";
+        else if (difficulty === 3) level = "medium";
+        else level = "hard";
+
+        const cmap = sceneCamouflage[currentScene.id];
+        let fillColor = "#ffd966";
+        let borderColor = "#fff7c0";
+
+        if (cmap && cmap[level]) {
+          fillColor = cmap[level].fill;
+          borderColor = cmap[level].border;
+        }
+
+        const baseOpacity = (difficulty <= 2) ? 1 : (difficulty === 3 ? 0.9 : (difficulty === 4 ? 0.75 : 0.6));
+
+        puck.style.backgroundColor = fillColor;
+        puck.style.border = "2px solid " + borderColor;
+        puck.style.opacity = String(baseOpacity);
+
+        // Slight random rotation for mouth orientation
+        const angleChoices = [0, 45, 90, 135, 180, 225, 270, 315];
+        const randomAngle = angleChoices[Math.floor(Math.random() * angleChoices.length)];
+        puck.style.transform = "translate(-50%, -50%) rotate(" + randomAngle + "deg)";
+      }
+
+      function placePuck() {
+        const rect = sceneArea.getBoundingClientRect();
+        const margin = 25;
+        const width = rect.width;
+        const height = rect.height;
+
+        const x = margin + Math.random() * (width - margin * 2);
+        const y = margin + Math.random() * (height - margin * 2);
+
+        puck.style.left = x + "px";
+        puck.style.top = y + "px";
+      }
+
+      function startRound() {
+        pickScene();
+        configurePuckAppearance();
+        placePuck();
+
+        errorsThisRound = 0;
+        roundActive = true;
+        roundStartTime = performance.now();
+        resultBadge.classList.remove("visible");
+        puck.style.display = "block";
+
+        statusLine.textContent = "Round active. Scan the scene and click Puckman when you find him.";
+      }
+
+      function endRound(hit) {
+        roundActive = false;
+        const now = performance.now();
+        const elapsed = roundStartTime ? ((now - roundStartTime) / 1000) : 0;
+
+        if (hit) {
+          resultBadge.textContent =
+            "Found in " + elapsed.toFixed(2) + " s · wrong clicks: " + errorsThisRound;
+          resultBadge.classList.add("visible");
+          statusLine.innerHTML =
+            "Round complete. Reaction time: <strong>" + elapsed.toFixed(2) +
+            " s</strong> · Wrong clicks: <strong>" + errorsThisRound + "</strong>. Press Start round for another scene.";
+        } else {
+          statusLine.textContent =
+            "Round stopped. Press Start round for a new scene.";
+        }
+      }
+
+      // Event handlers
+
+      difficultyRange.addEventListener("input", updateDifficultyBadge);
+
+      startRoundBtn.addEventListener("click", function () {
+        startRound();
+      });
+
+      puck.addEventListener("click", function (e) {
+        e.stopPropagation();
+        if (!roundActive) return;
+        puck.style.display = "none";
+        endRound(true);
+      });
+
+      sceneArea.addEventListener("click", function () {
+        if (!roundActive) return;
+        errorsThisRound++;
+        statusLine.innerHTML =
+          "Round active. Wrong clicks: <strong>" + errorsThisRound +
+          "</strong>. Keep searching for Puckman.";
+      });
+
+      window.addEventListener("resize", function () {
+        if (!roundActive) return;
+        placePuck();
+      });
+
+      // Initial
+      updateDifficultyBadge();
+      pickScene();
+      configurePuckAppearance();
+      placePuck();
+      statusLine.innerHTML =
+        "Idle. Scene loaded: <strong>" + currentScene.label +
+        "</strong>. Choose difficulty and press <strong>Start round</strong>.";
+    })();
+  </script>
+</body>
+</html>

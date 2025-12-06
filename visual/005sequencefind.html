@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Crowded Search - Sequence Finder</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      margin: 0;
+      padding: 1rem;
+      background: #111;
+      color: #f5f5f5;
+    }
+
+    h1 {
+      font-size: 1.4rem;
+      margin-bottom: 0.5rem;
+    }
+
+    .note {
+      font-size: 0.85rem;
+      max-width: 50rem;
+      margin-bottom: 0.75rem;
+      color: #ccc;
+    }
+
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      align-items: center;
+      margin-bottom: 0.75rem;
+    }
+
+    label {
+      font-size: 0.9rem;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+    }
+
+    input[type="number"],
+    input[type="text"] {
+      padding: 0.25rem 0.4rem;
+      font-size: 0.9rem;
+    }
+
+    input[type="text"] {
+      text-transform: uppercase;
+      width: 5rem;
+    }
+
+    button {
+      padding: 0.35rem 0.7rem;
+      font-size: 0.9rem;
+      cursor: pointer;
+      border-radius: 4px;
+      border: 1px solid #555;
+      background: #222;
+      color: #f5f5f5;
+    }
+
+    button:hover {
+      background: #333;
+    }
+
+    .status-bar {
+      margin-bottom: 0.75rem;
+      font-size: 0.85rem;
+    }
+
+    .status-highlight {
+      font-weight: bold;
+      color: #ffd966;
+    }
+
+    .grid-shell {
+      max-width: 960px;
+      margin: 0 auto;
+    }
+
+    .grid-container {
+      border-radius: 6px;
+      border: 2px solid #444;
+      background: #000;
+      padding: 0.4rem;
+      overflow: auto;
+    }
+
+    .grid {
+      display: inline-flex;
+      flex-direction: column;
+      gap: 2px;
+      user-select: none;
+    }
+
+    .grid-row {
+      display: flex;
+      gap: 2px;
+    }
+
+    .cell {
+      width: 28px;
+      height: 28px;
+      border-radius: 2px;
+      background: #111;
+      border: 1px solid #222;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.9rem;
+      cursor: pointer;
+      transition: background 0.12s ease, border-color 0.12s ease, transform 0.08s ease;
+    }
+
+    .cell:hover {
+      border-color: #555;
+    }
+
+    .cell-found {
+      background: #144d2a;
+      border-color: #35b36b;
+      color: #f5f5f5;
+    }
+
+    .cell-error {
+      background: #5a1111;
+      border-color: #ff6666;
+      transform: scale(0.94);
+    }
+
+    .target-indicator {
+      font-size: 0.9rem;
+      margin-bottom: 0.4rem;
+    }
+
+    .target-code {
+      font-weight: bold;
+      letter-spacing: 0.15em;
+      color: #ffd966;
+    }
+
+    .hint-text {
+      margin-top: 0.6rem;
+      font-size: 0.8rem;
+      color: #ccc;
+      max-width: 50rem;
+    }
+
+    .hint-text strong {
+      color: #ffd966;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      * {
+        scroll-behavior: auto !important;
+        transition: none !important;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <h1>Crowded Search - Sequence Finder</h1>
+
+  <p class="note">
+    This creates dense fields of letters and asks you to find specific sequences, such as all horizontal or vertical
+    <code>AB</code> pairs. The idea is to stress visual discrimination and tracking under crowding. This is a practice
+    tool, not a clinical test.
+  </p>
+
+  <div class="controls">
+    <label>
+      Target sequence:
+      <input type="text" id="targetInput" value="AB" maxlength="6" aria-label="Target sequence, for example AB or DOG">
+    </label>
+    <label>
+      Rows:
+      <input type="number" id="rowsInput" value="18" min="6" max="40">
+    </label>
+    <label>
+      Columns:
+      <input type="number" id="colsInput" value="26" min="6" max="50">
+    </label>
+    <label>
+      Min sequences:
+      <input type="number" id="minTargetsInput" value="6" min="1" max="60">
+    </label>
+    <button id="generateBtn">Generate grid</button>
+  </div>
+
+  <div class="target-indicator">
+    Target: <span id="targetDisplay" class="target-code">A B</span>
+    · Orientation: <span class="status-highlight">horizontal right and vertical down</span>
+  </div>
+
+  <div class="status-bar" id="statusBar">
+    Sequences: <span class="status-highlight" id="totalDisplay">0</span>
+    · Found: <span class="status-highlight" id="foundDisplay">0</span>
+    · Remaining: <span class="status-highlight" id="remainingDisplay">0</span>
+    · Errors: <span class="status-highlight" id="errorDisplay">0</span>
+    · Time: <span class="status-highlight" id="timeDisplay">0.0</span> s
+  </div>
+
+  <div class="grid-shell">
+    <div class="grid-container">
+      <div id="grid" class="grid" aria-label="Crowded letter grid"></div>
+    </div>
+
+    <p class="hint-text">
+      Task suggestion:
+      <br>
+      - Pick a comfortable viewing distance and keep your head still, using only your eyes to scan.
+      <br>
+      - First pass: scan row by row and click any cell you believe starts the target sequence
+      <strong>from left to right</strong>.
+      <br>
+      - Second pass: scan column by column and click any cell you believe starts the target sequence
+      <strong>from top to bottom</strong>.
+      <br>
+      Each correct click highlights the whole sequence. Wrong clicks increment the error counter and briefly highlight
+      the cell in red. Stop or change settings if the crowding or effort feels excessive.
+    </p>
+  </div>
+
+  <script>
+    (function () {
+      const ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+
+      const targetInput = document.getElementById("targetInput");
+      const rowsInput = document.getElementById("rowsInput");
+      const colsInput = document.getElementById("colsInput");
+      const minTargetsInput = document.getElementById("minTargetsInput");
+      const generateBtn = document.getElementById("generateBtn");
+
+      const targetDisplay = document.getElementById("targetDisplay");
+      const totalDisplay = document.getElementById("totalDisplay");
+      const foundDisplay = document.getElementById("foundDisplay");
+      const remainingDisplay = document.getElementById("remainingDisplay");
+      const errorDisplay = document.getElementById("errorDisplay");
+      const timeDisplay = document.getElementById("timeDisplay");
+
+      const gridEl = document.getElementById("grid");
+      const statusBar = document.getElementById("statusBar");
+
+      let grid = [];
+      let cellElems = [];
+      let targets = [];
+      let errorCount = 0;
+      let startTime = null;
+      let timerId = null;
+
+      function sanitizeTarget(raw) {
+        const cleaned = (raw || "").toUpperCase().replace(/[^A-Z]/g, "");
+        if (cleaned.length < 2) {
+          return "AB";
+        }
+        return cleaned;
+      }
+
+      function updateTargetDisplay(target) {
+        targetDisplay.textContent = target.split("").join(" ");
+      }
+
+      function randomLetter() {
+        const idx = Math.floor(Math.random() * ALPHABET.length);
+        return ALPHABET[idx];
+      }
+
+      function generateRandomGrid(rows, cols) {
+        const g = [];
+        for (let r = 0; r < rows; r++) {
+          const row = [];
+          for (let c = 0; c < cols; c++) {
+            row.push(randomLetter());
+          }
+          g.push(row);
+        }
+        return g;
+      }
+
+      function findTargetsInGrid(grid, target) {
+        const rows = grid.length;
+        const cols = grid[0].length;
+        const len = target.length;
+        const found = [];
+
+        for (let r = 0; r < rows; r++) {
+          for (let c = 0; c <= cols - len; c++) {
+            let match = true;
+            for (let k = 0; k < len; k++) {
+              if (grid[r][c + k] !== target[k]) {
+                match = false;
+                break;
+              }
+            }
+            if (match) {
+              const coords = [];
+              for (let k = 0; k < len; k++) {
+                coords.push({ r: r, c: c + k });
+              }
+              found.push({
+                coords: coords,
+                direction: "horizontal",
+                found: false
+              });
+            }
+          }
+        }
+
+        for (let c = 0; c < cols; c++) {
+          for (let r = 0; r <= rows - len; r++) {
+            let match = true;
+            for (let k = 0; k < len; k++) {
+              if (grid[r + k][c] !== target[k]) {
+                match = false;
+                break;
+              }
+            }
+            if (match) {
+              const coords = [];
+              for (let k = 0; k < len; k++) {
+                coords.push({ r: r + k, c: c });
+              }
+              found.push({
+                coords: coords,
+                direction: "vertical",
+                found: false
+              });
+            }
+          }
+        }
+
+        return found;
+      }
+
+      function buildGridElements(grid) {
+        gridEl.innerHTML = "";
+        const rows = grid.length;
+        const cols = grid[0].length;
+        cellElems = [];
+
+        for (let r = 0; r < rows; r++) {
+          const rowDiv = document.createElement("div");
+          rowDiv.className = "grid-row";
+          const rowElems = [];
+
+          for (let c = 0; c < cols; c++) {
+            const cell = document.createElement("div");
+            cell.className = "cell";
+            cell.textContent = grid[r][c];
+            cell.dataset.row = r.toString();
+            cell.dataset.col = c.toString();
+
+            cell.addEventListener("click", handleCellClick);
+
+            rowElems.push(cell);
+            rowDiv.appendChild(cell);
+          }
+
+          cellElems.push(rowElems);
+          gridEl.appendChild(rowDiv);
+        }
+      }
+
+      function handleCellClick(event) {
+        const cell = event.currentTarget;
+        const r = parseInt(cell.dataset.row, 10);
+        const c = parseInt(cell.dataset.col, 10);
+
+        const matchIndex = targets.findIndex(t => !t.found && t.coords[0].r === r && t.coords[0].c === c);
+
+        if (matchIndex >= 0) {
+          const targetSeq = targets[matchIndex];
+          targetSeq.found = true;
+
+          targetSeq.coords.forEach(coord => {
+            const cellEl = cellElems[coord.r][coord.c];
+            cellEl.classList.remove("cell-error");
+            cellEl.classList.add("cell-found");
+          });
+
+          updateCounts();
+
+          const remaining = targets.filter(t => !t.found).length;
+          if (remaining === 0) {
+            statusBar.innerHTML =
+              "Completed. Sequences: <span class=\"status-highlight\">" + targets.length +
+              "</span> · Errors: <span class=\"status-highlight\">" + errorCount +
+              "</span> · Time: <span class=\"status-highlight\">" + timeDisplay.textContent + "</span> s";
+            stopTimer();
+          }
+        } else {
+          errorCount++;
+          errorDisplay.textContent = errorCount.toString();
+          cell.classList.add("cell-error");
+          setTimeout(() => {
+            cell.classList.remove("cell-error");
+          }, 250);
+        }
+      }
+
+      function updateCounts() {
+        const total = targets.length;
+        const found = targets.filter(t => t.found).length;
+        const remaining = total - found;
+
+        totalDisplay.textContent = total.toString();
+        foundDisplay.textContent = found.toString();
+        remainingDisplay.textContent = remaining.toString();
+      }
+
+      function startTimer() {
+        stopTimer();
+        startTime = performance.now();
+        timerId = setInterval(() => {
+          if (!startTime) return;
+          const elapsed = (performance.now() - startTime) / 1000;
+          timeDisplay.textContent = elapsed.toFixed(1);
+        }, 100);
+      }
+
+      function stopTimer() {
+        if (timerId != null) {
+          clearInterval(timerId);
+          timerId = null;
+        }
+      }
+
+      function generateGridWithTargets() {
+        const rows = Math.max(6, Math.min(40, parseInt(rowsInput.value, 10) || 18));
+        const cols = Math.max(6, Math.min(50, parseInt(colsInput.value, 10) || 26));
+        const rawTarget = targetInput.value;
+        const target = sanitizeTarget(rawTarget);
+        const minTargets = Math.max(1, Math.min(60, parseInt(minTargetsInput.value, 10) || 6));
+
+        targetInput.value = target;
+        updateTargetDisplay(target);
+
+        let attempts = 0;
+        let found = [];
+        let lastGrid = null;
+
+        while (attempts < 50) {
+          const g = generateRandomGrid(rows, cols);
+          const f = findTargetsInGrid(g, target);
+          lastGrid = g;
+          if (f.length >= minTargets) {
+            grid = g;
+            found = f;
+            break;
+          }
+          attempts++;
+          found = f;
+          grid = g;
+        }
+
+        targets = found;
+        errorCount = 0;
+        errorDisplay.textContent = "0";
+
+        buildGridElements(grid);
+        updateCounts();
+
+        if (targets.length < minTargets) {
+          statusBar.innerHTML =
+            "Generated grid with <span class=\"status-highlight\">" + targets.length +
+            "</span> sequences (less than requested " + minTargets +
+            "). Errors: <span class=\"status-highlight\">" + errorCount +
+            "</span> · Time: <span class=\"status-highlight\">0.0</span> s";
+        } else {
+          statusBar.innerHTML =
+            "Grid ready. Sequences: <span class=\"status-highlight\">" + targets.length +
+            "</span> · Errors: <span class=\"status-highlight\">" + errorCount +
+            "</span> · Time: <span class=\"status-highlight\">0.0</span> s";
+        }
+
+        timeDisplay.textContent = "0.0";
+        startTimer();
+      }
+
+      generateBtn.addEventListener("click", generateGridWithTargets);
+
+      generateGridWithTargets();
+    })();
+  </script>
+</body>
+</html>
