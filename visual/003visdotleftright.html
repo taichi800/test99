@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Visual Tracking - Moving Dot</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      margin: 0;
+      padding: 1rem;
+      background: #111;
+      color: #f5f5f5;
+    }
+
+    h1 {
+      font-size: 1.4rem;
+      margin-bottom: 0.5rem;
+    }
+
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      align-items: center;
+      margin-bottom: 1rem;
+    }
+
+    label {
+      font-size: 0.9rem;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.25rem;
+    }
+
+    input[type="number"],
+    select {
+      padding: 0.25rem 0.4rem;
+      font-size: 0.9rem;
+    }
+
+    button {
+      padding: 0.4rem 0.7rem;
+      font-size: 0.9rem;
+      cursor: pointer;
+      border-radius: 4px;
+      border: 1px solid #555;
+      background: #222;
+      color: #f5f5f5;
+    }
+
+    button:hover {
+      background: #333;
+    }
+
+    .note {
+      font-size: 0.85rem;
+      max-width: 48rem;
+      margin-bottom: 0.75rem;
+      color: #ccc;
+    }
+
+    .viewport {
+      position: relative;
+      width: 100%;
+      max-width: 960px;
+      height: 360px;
+      margin: 0 auto;
+      border: 2px solid #444;
+      border-radius: 6px;
+      background: #000;
+      overflow: hidden;
+    }
+
+    .dot {
+      position: absolute;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: #ffd966;
+      box-shadow: 0 0 6px rgba(255, 217, 102, 0.8);
+      transform: translate(-50%, -50%);
+    }
+
+    .axis-line {
+      position: absolute;
+      background: rgba(200, 200, 200, 0.2);
+    }
+
+    .axis-line.horizontal {
+      top: 50%;
+      left: 5%;
+      right: 5%;
+      height: 2px;
+    }
+
+    .axis-line.vertical {
+      left: 50%;
+      top: 5%;
+      bottom: 5%;
+      width: 2px;
+    }
+
+    .edge-label {
+      position: absolute;
+      color: #888;
+      font-size: 0.8rem;
+      pointer-events: none;
+    }
+
+    .edge-label.left {
+      top: 50%;
+      left: 4px;
+      transform: translateY(-50%);
+    }
+
+    .edge-label.right {
+      top: 50%;
+      right: 4px;
+      transform: translateY(-50%);
+    }
+
+    .edge-label.top {
+      top: 4px;
+      left: 50%;
+      transform: translateX(-50%);
+    }
+
+    .edge-label.bottom {
+      bottom: 4px;
+      left: 50%;
+      transform: translateX(-50%);
+    }
+
+    .status-line {
+      margin-top: 0.5rem;
+      font-size: 0.85rem;
+      text-align: center;
+      color: #ccc;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      * {
+        scroll-behavior: auto !important;
+        transition: none !important;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <h1>Visual Tracking - Moving Dot</h1>
+
+  <p class="note">
+    Keep your head as still as possible and follow the dot only with your eyes.
+    Change the direction and speed to vary the task.
+    This is a prototype and not a medical device.
+  </p>
+
+  <div class="controls">
+    <label>
+      Mode:
+      <select id="modeSelect">
+        <option value="horizontal" selected>Horizontal</option>
+        <option value="vertical">Vertical</option>
+        <option value="diagonal">Diagonal (up-left to down-right)</option>
+      </select>
+    </label>
+
+    <label>
+      Speed (cycles per minute):
+      <input type="number" id="speedInput" min="5" max="60" value="15">
+    </label>
+
+    <label>
+      Path length (% of viewport):
+      <input type="number" id="pathInput" min="20" max="90" value="70">
+    </label>
+
+    <button id="startBtn">Start</button>
+    <button id="stopBtn">Stop</button>
+  </div>
+
+  <div class="viewport" id="viewport">
+    <div class="axis-line horizontal" id="axisHorizontal"></div>
+    <div class="axis-line vertical" id="axisVertical"></div>
+    <div class="edge-label left">← keep head still</div>
+    <div class="edge-label right">keep head still →</div>
+    <div class="edge-label top">↑ keep head still</div>
+    <div class="edge-label bottom">keep head still ↓</div>
+    <div class="dot" id="dot"></div>
+  </div>
+
+  <div class="status-line" id="statusLine">
+    Idle. Choose mode and press Start.
+  </div>
+
+  <script>
+    (function () {
+      const viewport = document.getElementById("viewport");
+      const dot = document.getElementById("dot");
+      const modeSelect = document.getElementById("modeSelect");
+      const speedInput = document.getElementById("speedInput");
+      const pathInput = document.getElementById("pathInput");
+      const startBtn = document.getElementById("startBtn");
+      const stopBtn = document.getElementById("stopBtn");
+      const statusLine = document.getElementById("statusLine");
+
+      const axisHorizontal = document.getElementById("axisHorizontal");
+      const axisVertical = document.getElementById("axisVertical");
+
+      let running = false;
+      let lastTimestamp = null;
+      let phase = 0; // 0 to 1
+      let requestId = null;
+
+      function updateAxisVisibility() {
+        const mode = modeSelect.value;
+        if (mode === "horizontal") {
+          axisHorizontal.style.display = "block";
+          axisVertical.style.display = "none";
+        } else if (mode === "vertical") {
+          axisHorizontal.style.display = "none";
+          axisVertical.style.display = "block";
+        } else {
+          // diagonal
+          axisHorizontal.style.display = "block";
+          axisVertical.style.display = "block";
+        }
+      }
+
+      function start() {
+        if (running) return;
+        running = true;
+        lastTimestamp = null;
+        statusLine.textContent = "Tracking in " + modeSelect.value + " mode.";
+        updateAxisVisibility();
+        requestId = requestAnimationFrame(step);
+      }
+
+      function stop() {
+        running = false;
+        if (requestId !== null) {
+          cancelAnimationFrame(requestId);
+          requestId = null;
+        }
+        statusLine.textContent = "Stopped. Adjust settings and press Start.";
+      }
+
+      function step(timestamp) {
+        if (!running) return;
+        if (lastTimestamp == null) {
+          lastTimestamp = timestamp;
+        }
+        const dt = (timestamp - lastTimestamp) / 1000;
+        lastTimestamp = timestamp;
+
+        const cyclesPerMinute = Math.max(1, Math.min(60, parseFloat(speedInput.value) || 15));
+        const cyclesPerSecond = cyclesPerMinute / 60;
+
+        // phase is 0 to 1 over a full back and forth cycle
+        phase += cyclesPerSecond * dt;
+        phase = phase % 1;
+
+        // Use triangle wave to go back and forth
+        let t;
+        if (phase < 0.5) {
+          t = phase * 2; // 0 to 1
+        } else {
+          t = (1 - phase) * 2; // back from 1 to 0
+        }
+
+        const rect = viewport.getBoundingClientRect();
+        const pathPercent = Math.max(20, Math.min(90, parseFloat(pathInput.value) || 70)) / 100;
+
+        const centerX = rect.width / 2;
+        const centerY = rect.height / 2;
+        const halfWidth = (rect.width * pathPercent) / 2;
+        const halfHeight = (rect.height * pathPercent) / 2;
+
+        let x = centerX;
+        let y = centerY;
+
+        const mode = modeSelect.value;
+        if (mode === "horizontal") {
+          x = centerX - halfWidth + 2 * halfWidth * t;
+          y = centerY;
+        } else if (mode === "vertical") {
+          x = centerX;
+          y = centerY - halfHeight + 2 * halfHeight * t;
+        } else if (mode === "diagonal") {
+          // top-left to bottom-right and back
+          x = centerX - halfWidth + 2 * halfWidth * t;
+          y = centerY - halfHeight + 2 * halfHeight * t;
+        }
+
+        dot.style.left = x + "px";
+        dot.style.top = y + "px";
+
+        requestId = requestAnimationFrame(step);
+      }
+
+      startBtn.addEventListener("click", start);
+      stopBtn.addEventListener("click", stop);
+      modeSelect.addEventListener("change", function () {
+        updateAxisVisibility();
+      });
+
+      updateAxisVisibility();
+    })();
+  </script>
+
+</body>
+</html>

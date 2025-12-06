@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Visual Tracking Letter Combinations</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      margin: 0;
+      padding: 1rem;
+      background: #111;
+      color: #f5f5f5;
+    }
+
+    h1 {
+      font-size: 1.4rem;
+      margin-bottom: 0.5rem;
+    }
+
+    .controls {
+      margin-bottom: 1rem;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      align-items: center;
+    }
+
+    label {
+      font-size: 0.9rem;
+    }
+
+    input[type="number"],
+    select {
+      padding: 0.25rem 0.4rem;
+      font-size: 0.9rem;
+    }
+
+    button {
+      padding: 0.4rem 0.7rem;
+      font-size: 0.9rem;
+      cursor: pointer;
+      border-radius: 4px;
+      border: 1px solid #555;
+      background: #222;
+      color: #f5f5f5;
+    }
+
+    button:hover {
+      background: #333;
+    }
+
+    .status-bar {
+      margin: 0.5rem 0 1rem 0;
+      font-size: 0.95rem;
+    }
+
+    .status-highlight {
+      font-weight: bold;
+      color: #ffd966;
+      word-break: break-all;
+    }
+
+    .grid {
+      display: flex;
+      flex-direction: column;
+      gap: 0.3rem;
+      max-width: 100%;
+      overflow-x: auto;
+      padding-bottom: 1rem;
+    }
+
+    .row-wrapper {
+      display: flex;
+      align-items: center;
+    }
+
+    .row-label {
+      min-width: 3rem;
+      text-align: right;
+      padding-right: 0.5rem;
+      font-size: 0.9rem;
+      color: #bbb;
+    }
+
+    .row {
+      display: flex;
+      gap: 0.25rem;
+      white-space: nowrap;
+      font-size: 1.1rem;
+    }
+
+    .cell {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 2.8rem;
+      padding: 0 0.25rem;
+      height: 1.7rem;
+      border-radius: 4px;
+      user-select: none;
+      border: 1px solid transparent;
+      transition: background 0.1s ease, border-color 0.1s ease;
+    }
+
+    .cell button {
+      all: unset;
+      width: 100%;
+      height: 100%;
+      text-align: center;
+      cursor: pointer;
+    }
+
+    .cell:focus-within {
+      outline: 2px solid #ffd966;
+      outline-offset: 2px;
+    }
+
+    .cell.correct {
+      background: #144d2a;
+      border-color: #35b36b;
+    }
+
+    .cell.wrong {
+      background: #5a1111;
+      border-color: #ff6666;
+    }
+
+    .results {
+      font-size: 0.9rem;
+      border-top: 1px solid #333;
+      padding-top: 0.5rem;
+    }
+
+    .results strong {
+      color: #ffd966;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      * {
+        scroll-behavior: auto !important;
+        transition: none !important;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <h1>Visual Tracking - Letter Combinations</h1>
+
+  <p style="font-size:0.9rem;max-width:48rem;">
+    Each row contains several 3 to 6 letter combinations. One of them is the target for that row.
+    Your task: for row 1, click the target shown; then row 2, and so on.
+    This is a prototype and not a medical tool.
+  </p>
+
+  <div class="controls">
+    <label>
+      Rows:
+      <input type="number" id="rowsInput" min="3" max="40" value="10">
+    </label>
+    <label>
+      Cells per row:
+      <input type="number" id="cellsInput" min="8" max="80" value="20">
+    </label>
+    <label>
+      Combo length:
+      <select id="comboLengthSelect">
+        <option value="3-6" selected>3 to 6 letters</option>
+        <option value="3-4">3 to 4 letters</option>
+        <option value="4-6">4 to 6 letters</option>
+      </select>
+    </label>
+    <button id="startBtn">Start / Reset</button>
+  </div>
+
+  <div class="status-bar" aria-live="polite">
+    Current target: <span id="targetDisplay" class="status-highlight">ABC</span> ·
+    Row <span id="rowDisplay" class="status-highlight">1</span> of
+    <span id="rowTotalDisplay">10</span> ·
+    Errors: <span id="errorDisplay" class="status-highlight">0</span>
+  </div>
+
+  <div id="grid" class="grid" role="list" aria-label="Combination rows"></div>
+
+  <div class="results" id="results" aria-live="polite"></div>
+
+  <script>
+    (function () {
+      const gridEl = document.getElementById("grid");
+      const rowsInput = document.getElementById("rowsInput");
+      const cellsInput = document.getElementById("cellsInput");
+      const comboLengthSelect = document.getElementById("comboLengthSelect");
+      const startBtn = document.getElementById("startBtn");
+
+      const targetDisplay = document.getElementById("targetDisplay");
+      const rowDisplay = document.getElementById("rowDisplay");
+      const rowTotalDisplay = document.getElementById("rowTotalDisplay");
+      const errorDisplay = document.getElementById("errorDisplay");
+      const resultsEl = document.getElementById("results");
+
+      let totalRows = 10;
+      let cellsPerRow = 20;
+      let currentRowIndex = 0;
+      let currentTarget = "";
+      let errorCount = 0;
+      let startTime = null;
+      let finished = false;
+      let targetCombos = [];
+
+      function parseComboLength() {
+        const val = comboLengthSelect.value;
+        if (val === "3-4") return { min: 3, max: 4 };
+        if (val === "4-6") return { min: 4, max: 6 };
+        return { min: 3, max: 6 };
+      }
+
+      function randomCombo(minLen, maxLen) {
+        const len = minLen + Math.floor(Math.random() * (maxLen - minLen + 1));
+        let s = "";
+        for (let i = 0; i < len; i++) {
+          const code = "A".charCodeAt(0) + Math.floor(Math.random() * 26);
+          s += String.fromCharCode(code);
+        }
+        return s;
+      }
+
+      function generateUniqueTarget(existing, minLen, maxLen) {
+        let combo;
+        do {
+          combo = randomCombo(minLen, maxLen);
+        } while (existing.has(combo));
+        existing.add(combo);
+        return combo;
+      }
+
+      function generateGrid() {
+        gridEl.innerHTML = "";
+        const lenRange = parseComboLength();
+
+        totalRows = Math.max(3, Math.min(parseInt(rowsInput.value, 10) || 3, 40));
+        cellsPerRow = Math.max(8, Math.min(parseInt(cellsInput.value, 10) || 8, 80));
+
+        rowTotalDisplay.textContent = totalRows.toString();
+        currentRowIndex = 0;
+        errorCount = 0;
+        errorDisplay.textContent = "0";
+        finished = false;
+        resultsEl.textContent = "";
+        startTime = performance.now();
+        targetCombos = [];
+
+        const usedTargets = new Set();
+
+        for (let r = 0; r < totalRows; r++) {
+          const target = generateUniqueTarget(usedTargets, lenRange.min, lenRange.max);
+          targetCombos.push(target);
+        }
+
+        currentTarget = targetCombos[0];
+        targetDisplay.textContent = currentTarget;
+        rowDisplay.textContent = "1";
+
+        for (let r = 0; r < totalRows; r++) {
+          const rowWrapper = document.createElement("div");
+          rowWrapper.className = "row-wrapper";
+          rowWrapper.setAttribute("role", "listitem");
+
+          const label = document.createElement("div");
+          label.className = "row-label";
+          label.textContent = "Row " + (r + 1);
+          rowWrapper.appendChild(label);
+
+          const row = document.createElement("div");
+          row.className = "row";
+          row.dataset.rowIndex = r.toString();
+
+          const guaranteedIndex = Math.floor(Math.random() * cellsPerRow);
+
+          for (let c = 0; c < cellsPerRow; c++) {
+            const cell = document.createElement("div");
+            cell.className = "cell";
+
+            const btn = document.createElement("button");
+            btn.type = "button";
+            btn.tabIndex = 0;
+
+            let combo;
+            if (c === guaranteedIndex) {
+              combo = targetCombos[r];
+            } else {
+              // Avoid matching the target for that row to keep it unambiguous
+              do {
+                combo = randomCombo(lenRange.min, lenRange.max);
+              } while (combo === targetCombos[r]);
+            }
+
+            btn.textContent = combo;
+            btn.dataset.combo = combo;
+            btn.dataset.rowIndex = r.toString();
+
+            btn.addEventListener("click", handleCellClick);
+
+            cell.appendChild(btn);
+            row.appendChild(cell);
+          }
+
+          rowWrapper.appendChild(row);
+          gridEl.appendChild(rowWrapper);
+        }
+
+        const firstButton = gridEl.querySelector("button");
+        if (firstButton) {
+          firstButton.focus();
+        }
+      }
+
+      function handleCellClick(evt) {
+        if (finished) return;
+
+        const btn = evt.currentTarget;
+        const combo = btn.dataset.combo;
+        const rowIndex = parseInt(btn.dataset.rowIndex, 10);
+        const cellDiv = btn.parentElement;
+
+        if (rowIndex !== currentRowIndex) {
+          markCell(cellDiv, "wrong");
+          errorCount++;
+          errorDisplay.textContent = errorCount.toString();
+          return;
+        }
+
+        if (combo === currentTarget) {
+          markCell(cellDiv, "correct");
+          advanceRow();
+        } else {
+          markCell(cellDiv, "wrong");
+          errorCount++;
+          errorDisplay.textContent = errorCount.toString();
+        }
+      }
+
+      function markCell(cellDiv, type) {
+        cellDiv.classList.remove("correct", "wrong");
+        cellDiv.classList.add(type);
+        if (type === "wrong") {
+          setTimeout(() => {
+            cellDiv.classList.remove("wrong");
+          }, 300);
+        }
+      }
+
+      function advanceRow() {
+        currentRowIndex++;
+        if (currentRowIndex >= totalRows) {
+          finishTask();
+          return;
+        }
+        currentTarget = targetCombos[currentRowIndex];
+        targetDisplay.textContent = currentTarget;
+        rowDisplay.textContent = (currentRowIndex + 1).toString();
+
+        const nextRowWrapper = gridEl.querySelector(
+          ".row-wrapper:nth-child(" + (currentRowIndex + 1) + ")"
+        );
+        if (nextRowWrapper && nextRowWrapper.scrollIntoView) {
+          nextRowWrapper.scrollIntoView({ behavior: "smooth", block: "center" });
+        }
+      }
+
+      function finishTask() {
+        finished = true;
+        const endTime = performance.now();
+        const seconds = ((endTime - startTime) / 1000).toFixed(1);
+        resultsEl.innerHTML =
+          "<p>Completed " +
+          totalRows +
+          " rows in <strong>" +
+          seconds +
+          " seconds</strong> with <strong>" +
+          errorCount +
+          " errors</strong>.</p>";
+      }
+
+      startBtn.addEventListener("click", generateGrid);
+
+      generateGrid();
+    })();
+  </script>
+
+</body>
+</html>
